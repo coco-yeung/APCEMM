@@ -549,6 +549,8 @@ namespace FVM_ANDS{
         if      ( parallelAdvection ) \
         default ( shared          ) \
         schedule( static, 100      )
+    
+
         for(int i = 0; i < nInteriorPoints_; i++){
             //When a boundary condition is in place, phi at the face can be directly calculated using the BC.
             //Therefore, that term goes to the RHS and the contribution of that face to the coeffs goes to 0.
@@ -558,17 +560,22 @@ namespace FVM_ANDS{
             int idx_N = i + 1;
             int idx_S = i - 1;
 
+            Point* point = points_[i].get();
+            auto bc_type = point->bcType();
+            auto direction = point->bcDirection();
+            auto second_bc_opt = point->secondBoundaryConds();
+
             //commenting out this results in ~30% speedup
             //The calls involving the optional are maybe 1/3 of the cost. Maybe something to look at later.
-            if(points_[i]->bcType() != BoundaryConditionFlag::INTERIOR){
-                Point* point = points_[i].get();
-                FaceDirection direction = point->bcDirection();
+            if(bc_type != BoundaryConditionFlag::INTERIOR){
+                // Point* point = points_[i].get();
+                // FaceDirection direction = point->bcDirection();
                 isNorthBoundary = direction == FaceDirection::NORTH;
                 isSouthBoundary = direction == FaceDirection::SOUTH;
 
                 //Corner cases...
-                bool secondaryWestBound = (point->secondBoundaryConds() && point->secondBoundaryConds()->direction == FaceDirection::WEST);
-                bool secondaryEastBound = (point->secondBoundaryConds() && point->secondBoundaryConds()->direction == FaceDirection::EAST);
+                bool secondaryWestBound = (second_bc_opt && second_bc_opt->direction == FaceDirection::WEST);
+                bool secondaryEastBound = (second_bc_opt && second_bc_opt->direction == FaceDirection::EAST);
 
                 isWestBoundary = (direction == FaceDirection::WEST || secondaryWestBound);
                 isEastBoundary = (direction == FaceDirection::EAST || secondaryEastBound);
