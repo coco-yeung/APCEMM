@@ -566,49 +566,9 @@ namespace FVM_ANDS{
             int idx_N = i + 1;
             int idx_S = i - 1;
 
-            //commenting out this results in ~30% speedup
-            //The calls involving the optional are maybe 1/3 of the cost. Maybe something to look at later.
-            // if(bc_type != BoundaryConditionFlag::INTERIOR){
-            //     // Point* point = points_[i].get();
-            //     // FaceDirection direction = point->bcDirection();
-            //     isNorthBoundary = direction == FaceDirection::NORTH;
-            //     isSouthBoundary = direction == FaceDirection::SOUTH;
-
-            //     //Corner cases...
-            //     bool secondaryWestBound = (second_bc_opt && second_bc_opt->direction == FaceDirection::WEST);
-            //     bool secondaryEastBound = (second_bc_opt && second_bc_opt->direction == FaceDirection::EAST);
-
-            //     isWestBoundary = (direction == FaceDirection::WEST || secondaryWestBound);
-            //     isEastBoundary = (direction == FaceDirection::EAST || secondaryEastBound);
-
-            //     //only call this lookup function on boundary nodes which are inconsequential in number
-            //     idx_N = isNorthBoundary? point->corrPoint() : idx_N;
-            //     idx_S = isSouthBoundary? point->corrPoint() : idx_S;
-            //     idx_E = isEastBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_E;
-            //     idx_W = isWestBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_W;
-            // }
-            //When you declare these vars (inside or outside loop) has 0 impact)
-            //takes ~ 6 out of 18 ns on background var calcs
-
-            //these cost almost nothing to compute but commenting out anyway for maximum performance
-            // double dphi_dx_E = (phi_[idx_E] - phi_[i]) * invdx_;
-            // double dphi_dx_W = (phi_[i] - phi_[idx_W]) * invdx_;
-            // double dphi_dy_N = (phi_[idx_N] - phi_[i]) * invdy_;
-            // double dphi_dy_S = (phi_[i] - phi_[idx_S]) * invdy_;
-            
-            //ignoreing distinction of faces saves a good amt of time
-            // double u_W = isWestBoundary? u_vec_[i] : 0.5 * (u_vec_[i] + u_vec_[idx_W]);
-            // double u_E = isEastBoundary? u_vec_[i] : 0.5 * (u_vec_[i] + u_vec_[idx_E]);
-            // double v_N = isNorthBoundary? v_vec_[i] : 0.5 * (v_vec_[i] + v_vec_[idx_N]);
-            // double v_S = isSouthBoundary? v_vec_[i] : 0.5 * (v_vec_[i] + v_vec_[idx_S]);
             double u_local = u_vec_[i];
             double v_local = v_vec_[i];
 
-            // auto stop = std::chrono::high_resolution_clock::now();
-            // auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
-            // avgBackgroundCalcTime += duration.count();
-            //std::cout << "ForwardEuler: Background Variable Calc Time: " << duration.count() << "ns" << std::endl;
-            // start = std::chrono::high_resolution_clock::now();
             double phi_N, phi_S, phi_W, phi_E;
 
             //Unraveling any of these if's into single liners hurts performance
