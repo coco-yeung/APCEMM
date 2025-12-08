@@ -543,15 +543,21 @@ namespace FVM_ANDS{
 
     Eigen::VectorXd AdvDiffSystem::forwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
         Eigen::VectorXd soln(nTotalPoints_);
+        std::vector<int> interior;
+        std::vector<int> boundary;
+
+        for (int i = 0; i < nInteriorPoints_; i++) {
+            if (points_[i]->bcType() == BoundaryConditionFlag::INTERIOR) interior.push_back(i);
+            else boundary.push_back(i);
+        }
+        
         // double avgBackgroundCalcTime = 0;
         //Explicit Time-Stepping
         #pragma omp parallel for    \
         if      ( parallelAdvection ) \
         default ( shared          ) \
         schedule( static, 100      )
-    
-
-        for(int i = 0; i < nInteriorPoints_; i++){
+        for(int i : interior){
             //When a boundary condition is in place, phi at the face can be directly calculated using the BC.
             //Therefore, that term goes to the RHS and the contribution of that face to the coeffs goes to 0.
             bool isNorthBoundary = 0, isWestBoundary = 0, isEastBoundary = 0, isSouthBoundary = 0, secondaryWestBound = 0, secondaryEastBound = 0;
@@ -560,32 +566,27 @@ namespace FVM_ANDS{
             int idx_N = i + 1;
             int idx_S = i - 1;
 
-            Point* point = points_[i].get();
-            auto bc_type = point->bcType();
-            auto direction = point->bcDirection();
-            auto second_bc_opt = point->secondBoundaryConds();
-
             //commenting out this results in ~30% speedup
             //The calls involving the optional are maybe 1/3 of the cost. Maybe something to look at later.
-            if(bc_type != BoundaryConditionFlag::INTERIOR){
-                // Point* point = points_[i].get();
-                // FaceDirection direction = point->bcDirection();
-                isNorthBoundary = direction == FaceDirection::NORTH;
-                isSouthBoundary = direction == FaceDirection::SOUTH;
+            // if(bc_type != BoundaryConditionFlag::INTERIOR){
+            //     // Point* point = points_[i].get();
+            //     // FaceDirection direction = point->bcDirection();
+            //     isNorthBoundary = direction == FaceDirection::NORTH;
+            //     isSouthBoundary = direction == FaceDirection::SOUTH;
 
-                //Corner cases...
-                bool secondaryWestBound = (second_bc_opt && second_bc_opt->direction == FaceDirection::WEST);
-                bool secondaryEastBound = (second_bc_opt && second_bc_opt->direction == FaceDirection::EAST);
+            //     //Corner cases...
+            //     bool secondaryWestBound = (second_bc_opt && second_bc_opt->direction == FaceDirection::WEST);
+            //     bool secondaryEastBound = (second_bc_opt && second_bc_opt->direction == FaceDirection::EAST);
 
-                isWestBoundary = (direction == FaceDirection::WEST || secondaryWestBound);
-                isEastBoundary = (direction == FaceDirection::EAST || secondaryEastBound);
+            //     isWestBoundary = (direction == FaceDirection::WEST || secondaryWestBound);
+            //     isEastBoundary = (direction == FaceDirection::EAST || secondaryEastBound);
 
-                //only call this lookup function on boundary nodes which are inconsequential in number
-                idx_N = isNorthBoundary? point->corrPoint() : idx_N;
-                idx_S = isSouthBoundary? point->corrPoint() : idx_S;
-                idx_E = isEastBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_E;
-                idx_W = isWestBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_W;
-            }
+            //     //only call this lookup function on boundary nodes which are inconsequential in number
+            //     idx_N = isNorthBoundary? point->corrPoint() : idx_N;
+            //     idx_S = isSouthBoundary? point->corrPoint() : idx_S;
+            //     idx_E = isEastBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_E;
+            //     idx_W = isWestBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_W;
+            // }
             //When you declare these vars (inside or outside loop) has 0 impact)
             //takes ~ 6 out of 18 ns on background var calcs
 
@@ -663,6 +664,49 @@ namespace FVM_ANDS{
             // duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
             // avgFluxCalcTime += duration.count();
         }
+
+        #pragma omp parallel for    \
+        if      ( parallelAdvection ) \
+        default ( shared          ) \
+        schedule( static, 100      )
+        for (int i : boundary) {
+            Point* point = points_[i].get();
+            auto bc_type = point->bcType();
+            auto direction = point->bcDirection();
+            auto second_bc_opt = point->secondBoundaryConds();
+
+            bool isNorthBoundary = direction == FaceDirection::NORTH;
+            bool isSouthBoundary = direction == FaceDirection::SOUTH;
+            bool secondaryWestBound = (second_bc_opt && second_bc_opt->direction == FaceDirection::WEST);
+            bool secondaryEastBound = (second_bc_opt && second_bc_opt->direction == FaceDirection::EAST);
+            bool isWestBoundary = direction == FaceDirection::WEST || secondaryWestBound;
+            bool isEastBoundary = direction == FaceDirection::EAST || secondaryEastBound;
+
+            int idx_E = isEastBoundary ? (secondaryEastBound ? second_bc_opt->corrPoint : point->corrPoint()) : i + ny_;
+            int idx_W = isWestBoundary ? (secondaryWestBound ? second_bc_opt->corrPoint : point->corrPoint()) : i - ny_;
+            int idx_N = isNorthBoundary ? point->corrPoint() : i + 1;
+            int idx_S = isSouthBoundary ? point->corrPoint() : i - 1;
+
+            double u_local = u_vec_[i];
+            double v_local = v_vec_[i];
+
+            // Compute phi at faces with BCs
+            double phi_N = isNorthBoundary ? point->bcVal() : (v_local >= 0 ? phi_[i] + 0.5 * minmod_N_vPos(i) * (phi_[idx_N] - phi_[i])
+                                                                        : phi_[idx_N] + 0.5 * minmod_N_vNeg(i) * (phi_[i] - phi_[idx_N]));
+            double phi_S = isSouthBoundary ? point->bcVal() : (v_local >= 0 ? phi_[idx_S] + 0.5 * minmod_S_vPos(i) * (phi_[i] - phi_[idx_S])
+                                                                        : phi_[i] + 0.5 * minmod_S_vNeg(i) * (phi_[idx_S] - phi_[i]));
+            double phi_W = isWestBoundary ? (secondaryWestBound ? second_bc_opt->bcVal : point->bcVal())
+                                        : (u_local >= 0 ? phi_[idx_W] + 0.5 * minmod_W_vPos(i) * (phi_[i] - phi_[idx_W])
+                                                        : phi_[i] + 0.5 * minmod_W_vNeg(i) * (phi_[idx_W] - phi_[i]));
+            double phi_E = isEastBoundary ? (secondaryEastBound ? second_bc_opt->bcVal : point->bcVal())
+                                        : (u_local >= 0 ? phi_[i] + 0.5 * minmod_E_vPos(i) * (phi_[idx_E] - phi_[i])
+                                                        : phi_[idx_E] + 0.5 * minmod_E_vNeg(i) * (phi_[i] - phi_[idx_E]));
+
+            soln[i] = dt_ * invdx_ * (u_local * phi_W - u_local * phi_E)
+                    + dt_ * invdy_ * (v_local * phi_S - v_local * phi_N)
+                    + source_[i] * dt_ + phi_[i];
+        }
+
         return soln;
     }
     
