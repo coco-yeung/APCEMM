@@ -5,7 +5,13 @@
 #include "APCEMM.h"
 
 namespace FVM_ANDS{
-    AdvDiffSystem::AdvDiffSystem(const AdvDiffParams& params, const Vector_1D xCoords, const Vector_1D yCoords, const BoundaryConditions& bc, const Eigen::VectorXd& phi_init, vecFormat format) :
+    AdvDiffSystem::AdvDiffSystem(
+        const AdvDiffParams& params, 
+        const Vector_1D xCoords, 
+        const Vector_1D yCoords, 
+        const BoundaryConditions& bc, 
+        const Eigen::VectorXd& phi_init, 
+        vecFormat format) :
         format_(format),
         u_double_ (params.u),
         v_double_ (params.v),
@@ -543,130 +549,154 @@ namespace FVM_ANDS{
 
     Eigen::VectorXd AdvDiffSystem::forwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
         Eigen::VectorXd soln(nTotalPoints_);
-        std::vector<int> interior;
-        std::vector<int> boundary;
 
-        for (int i = 0; i < nInteriorPoints_; i++) {
-            if (points_[i]->bcType() == BoundaryConditionFlag::INTERIOR) interior.push_back(i);
-            else boundary.push_back(i);
+        // Cache data that exists in your current code
+        const double* phi_ptr = phi_.data();
+        const double* u_ptr = u_vec_.data();
+        const double* v_ptr = v_vec_.data();
+        const double* source_ptr = source_.data();
+        double* soln_ptr = soln.data();
+        
+        // Pre-extract boundary information to avoid repeated pointer derefs
+        struct PointCache {
+            BoundaryConditionFlag bcType;
+            FaceDirection bcDirection;
+            double bcVal;
+            bool hasSecondaryBC;
+            FaceDirection secondaryDirection;
+            double secondaryBCVal;
+            int corrPoint;
+            int secondaryCorrPoint;
+        };
+        
+        std::vector<PointCache> pointCache(nInteriorPoints_);
+        
+        // Build cache once (do this in constructor for best performance)
+        for(int i = 0; i < nInteriorPoints_; i++) {
+            const Point* pt = points_[i].get();
+            pointCache[i].bcType = pt->bcType();
+            pointCache[i].bcDirection = pt->bcDirection();
+            pointCache[i].bcVal = pt->bcVal();
+            pointCache[i].corrPoint = pt->corrPoint();
+            
+            auto secondBC = pt->secondBoundaryConds();
+            if(secondBC) {
+                pointCache[i].hasSecondaryBC = true;
+                pointCache[i].secondaryDirection = secondBC->direction;
+                pointCache[i].secondaryBCVal = secondBC->bcVal;
+                pointCache[i].secondaryCorrPoint = secondBC->corrPoint;
+            } else {
+                pointCache[i].hasSecondaryBC = false;
+            }
         }
         
-        // double avgBackgroundCalcTime = 0;
-        //Explicit Time-Stepping
+        const PointCache* cache_ptr = pointCache.data();
+        
         #pragma omp parallel for    \
         if      ( parallelAdvection ) \
         default ( shared          ) \
         schedule( static, 100      )
-        for(int i : interior){
-            //When a boundary condition is in place, phi at the face can be directly calculated using the BC.
-            //Therefore, that term goes to the RHS and the contribution of that face to the coeffs goes to 0.
-            bool isNorthBoundary = 0, isWestBoundary = 0, isEastBoundary = 0, isSouthBoundary = 0, secondaryWestBound = 0, secondaryEastBound = 0;
-            int idx_E = i + ny_;
-            int idx_W = i - ny_;
-            int idx_N = i + 1;
-            int idx_S = i - 1;
-
-            double u_local = u_vec_[i];
-            double v_local = v_vec_[i];
-
-            double phi_N, phi_S, phi_W, phi_E;
-
-            //Unraveling any of these if's into single liners hurts performance
-            //Killing the branching completely into 1 statement (not possible) only results in ~10% speedup (not worth it)
-            //Using only first order upwind can result in a ~40% speedup of the total advection calc.
-            //So... there is significantly more cost from actually doing the calculation than from branching.
-            if(isNorthBoundary){
-                phi_N = points_[i]->bcVal();
+        for(int i = 0; i < nInteriorPoints_; i++) {
+            const PointCache& cache = cache_ptr[i];
+            
+            const double u_local = u_ptr[i];
+            const double v_local = v_ptr[i];
+            const double phi_i = phi_ptr[i];
+            
+            // Compute neighbor indices inline (assuming row-major with your format)
+            const int idx_N = i + 1;
+            const int idx_S = i - 1;
+            const int idx_E = i + ny_;
+            const int idx_W = i - ny_;
+            
+            const bool isInterior = (cache.bcType == BoundaryConditionFlag::INTERIOR);
+            
+            double phi_N, phi_S, phi_E, phi_W;
+            
+            if(isInterior) {
+                // Hot path - no boundary conditions
+                const double phi_N_raw = phi_ptr[idx_N];
+                const double phi_S_raw = phi_ptr[idx_S];
+                const double phi_E_raw = phi_ptr[idx_E];
+                const double phi_W_raw = phi_ptr[idx_W];
+                
+                // North face
+                phi_N = (v_local >= 0) 
+                    ? phi_i + 0.5 * minmod_N_vPos(i) * (phi_N_raw - phi_i)
+                    : phi_N_raw + 0.5 * minmod_N_vNeg(i) * (phi_i - phi_N_raw);
+                
+                // South face
+                phi_S = (v_local >= 0)
+                    ? phi_S_raw + 0.5 * minmod_S_vPos(i) * (phi_i - phi_S_raw)
+                    : phi_i + 0.5 * minmod_S_vNeg(i) * (phi_S_raw - phi_i);
+                
+                // East face
+                phi_E = (u_local >= 0)
+                    ? phi_i + 0.5 * minmod_E_vPos(i) * (phi_E_raw - phi_i)
+                    : phi_E_raw + 0.5 * minmod_E_vNeg(i) * (phi_i - phi_E_raw);
+                
+                // West face
+                phi_W = (u_local >= 0)
+                    ? phi_W_raw + 0.5 * minmod_W_vPos(i) * (phi_i - phi_W_raw)
+                    : phi_i + 0.5 * minmod_W_vNeg(i) * (phi_W_raw - phi_i);
+                    
+            } else {
+                // Boundary case
+                const bool isNorth = (cache.bcDirection == FaceDirection::NORTH);
+                const bool isSouth = (cache.bcDirection == FaceDirection::SOUTH);
+                const bool isWest = (cache.bcDirection == FaceDirection::WEST || 
+                                    (cache.hasSecondaryBC && cache.secondaryDirection == FaceDirection::WEST));
+                const bool isEast = (cache.bcDirection == FaceDirection::EAST || 
+                                    (cache.hasSecondaryBC && cache.secondaryDirection == FaceDirection::EAST));
+                
+                // North face
+                if(isNorth) {
+                    phi_N = cache.bcVal;
+                } else {
+                    const double phi_N_raw = phi_ptr[idx_N];
+                    phi_N = (v_local >= 0)
+                        ? phi_i + 0.5 * minmod_N_vPos(i) * (phi_N_raw - phi_i)
+                        : phi_N_raw + 0.5 * minmod_N_vNeg(i) * (phi_i - phi_N_raw);
+                }
+                
+                // South face
+                if(isSouth) {
+                    phi_S = cache.bcVal;
+                } else {
+                    const double phi_S_raw = phi_ptr[idx_S];
+                    phi_S = (v_local >= 0)
+                        ? phi_S_raw + 0.5 * minmod_S_vPos(i) * (phi_i - phi_S_raw)
+                        : phi_i + 0.5 * minmod_S_vNeg(i) * (phi_S_raw - phi_i);
+                }
+                
+                // West face
+                if(isWest) {
+                    phi_W = (cache.hasSecondaryBC && cache.secondaryDirection == FaceDirection::WEST)
+                        ? cache.secondaryBCVal : cache.bcVal;
+                } else {
+                    const double phi_W_raw = phi_ptr[idx_W];
+                    phi_W = (u_local >= 0)
+                        ? phi_W_raw + 0.5 * minmod_W_vPos(i) * (phi_i - phi_W_raw)
+                        : phi_i + 0.5 * minmod_W_vNeg(i) * (phi_W_raw - phi_i);
+                }
+                
+                // East face
+                if(isEast) {
+                    phi_E = (cache.hasSecondaryBC && cache.secondaryDirection == FaceDirection::EAST)
+                        ? cache.secondaryBCVal : cache.bcVal;
+                } else {
+                    const double phi_E_raw = phi_ptr[idx_E];
+                    phi_E = (u_local >= 0)
+                        ? phi_i + 0.5 * minmod_E_vPos(i) * (phi_E_raw - phi_i)
+                        : phi_E_raw + 0.5 * minmod_E_vNeg(i) * (phi_i - phi_E_raw);
+                }
             }
-            else if (v_local >= 0){
-                phi_N = phi_[i] + 0.5 * minmod_N_vPos(i) * (phi_[idx_N] - phi_[i]);
-            }
-            else {
-                phi_N = phi_[idx_N] + 0.5 * minmod_N_vNeg(i) * (phi_[i] - phi_[idx_N]);
-            }
-            if(isSouthBoundary){
-                phi_S = points_[i]->bcVal();
-            }
-            else if (v_local >= 0){
-                phi_S = phi_[idx_S] +  0.5 * minmod_S_vPos(i) * (phi_[i] - phi_[idx_S]);
-            }
-            else {
-                phi_S = phi_[i] +  0.5 * minmod_S_vNeg(i) * (phi_[idx_S] - phi_[i]);
-            }
-
-            if(isWestBoundary){
-                phi_W = secondaryWestBound ? points_[i]->secondBoundaryConds().value().bcVal : points_[i]->bcVal();
-            }
-            else if (u_local >= 0){
-                phi_W = phi_[idx_W] + 0.5 * minmod_W_vPos(i) * (phi_[i] - phi_[idx_W]);
-            }
-            else {
-                phi_W = phi_[i] + 0.5 * minmod_W_vNeg(i) * (phi_[idx_W] - phi_[i]);
-            }
-
-            if(isEastBoundary){
-                phi_E = secondaryEastBound ? points_[i]->secondBoundaryConds().value().bcVal : points_[i]->bcVal();
-            }
-            else if (u_local >= 0){
-                phi_E = phi_[i] + 0.5 * minmod_E_vPos(i) * (phi_[idx_E] - phi_[i]);
-            }
-            else {
-                phi_E = phi_[idx_E] + 0.5 * minmod_E_vNeg(i) * (phi_[i] - phi_[idx_E]);
-            }
-
-            //std::cout << "ForwardEuler: Fluxes and Update Time: " << duration.count() << "ns" << std::endl;
-
-            //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
-            soln[i] = /*(!operatorSplit) * (Dh_ * dt_ * invdx_ * (dphi_dx_E - dphi_dx_W) + Dv_ * dt_ * invdy_ * (dphi_dy_N - dphi_dy_S))\*/
-                     dt_ * invdx_ * (u_local * phi_W - u_local * phi_E) + dt_ * invdy_ * (v_local * phi_S - v_local * phi_N)\
-                    + source_[i] * dt_ + phi_[i];
-            // stop = std::chrono::high_resolution_clock::now();
-            // duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
-            // avgFluxCalcTime += duration.count();
+            
+            soln_ptr[i] = dt_ * invdx_ * (u_local * phi_W - u_local * phi_E)
+                        + dt_ * invdy_ * (v_local * phi_S - v_local * phi_N)
+                        + source_ptr[i] * dt_ + phi_i;
         }
-
-        #pragma omp parallel for    \
-        if      ( parallelAdvection ) \
-        default ( shared          ) \
-        schedule( static, 100      )
-        for (int i : boundary) {
-            Point* point = points_[i].get();
-            auto bc_type = point->bcType();
-            auto direction = point->bcDirection();
-            auto second_bc_opt = point->secondBoundaryConds();
-
-            bool isNorthBoundary = direction == FaceDirection::NORTH;
-            bool isSouthBoundary = direction == FaceDirection::SOUTH;
-            bool secondaryWestBound = (second_bc_opt && second_bc_opt->direction == FaceDirection::WEST);
-            bool secondaryEastBound = (second_bc_opt && second_bc_opt->direction == FaceDirection::EAST);
-            bool isWestBoundary = direction == FaceDirection::WEST || secondaryWestBound;
-            bool isEastBoundary = direction == FaceDirection::EAST || secondaryEastBound;
-
-            int idx_E = isEastBoundary ? (secondaryEastBound ? second_bc_opt->corrPoint : point->corrPoint()) : i + ny_;
-            int idx_W = isWestBoundary ? (secondaryWestBound ? second_bc_opt->corrPoint : point->corrPoint()) : i - ny_;
-            int idx_N = isNorthBoundary ? point->corrPoint() : i + 1;
-            int idx_S = isSouthBoundary ? point->corrPoint() : i - 1;
-
-            double u_local = u_vec_[i];
-            double v_local = v_vec_[i];
-
-            // Compute phi at faces with BCs
-            double phi_N = isNorthBoundary ? point->bcVal() : (v_local >= 0 ? phi_[i] + 0.5 * minmod_N_vPos(i) * (phi_[idx_N] - phi_[i])
-                                                                        : phi_[idx_N] + 0.5 * minmod_N_vNeg(i) * (phi_[i] - phi_[idx_N]));
-            double phi_S = isSouthBoundary ? point->bcVal() : (v_local >= 0 ? phi_[idx_S] + 0.5 * minmod_S_vPos(i) * (phi_[i] - phi_[idx_S])
-                                                                        : phi_[i] + 0.5 * minmod_S_vNeg(i) * (phi_[idx_S] - phi_[i]));
-            double phi_W = isWestBoundary ? (secondaryWestBound ? second_bc_opt->bcVal : point->bcVal())
-                                        : (u_local >= 0 ? phi_[idx_W] + 0.5 * minmod_W_vPos(i) * (phi_[i] - phi_[idx_W])
-                                                        : phi_[i] + 0.5 * minmod_W_vNeg(i) * (phi_[idx_W] - phi_[i]));
-            double phi_E = isEastBoundary ? (secondaryEastBound ? second_bc_opt->bcVal : point->bcVal())
-                                        : (u_local >= 0 ? phi_[i] + 0.5 * minmod_E_vPos(i) * (phi_[idx_E] - phi_[i])
-                                                        : phi_[idx_E] + 0.5 * minmod_E_vNeg(i) * (phi_[i] - phi_[idx_E]));
-
-            soln[i] = dt_ * invdx_ * (u_local * phi_W - u_local * phi_E)
-                    + dt_ * invdy_ * (v_local * phi_S - v_local * phi_N)
-                    + source_[i] * dt_ + phi_[i];
-        }
-
+        
         return soln;
     }
     
