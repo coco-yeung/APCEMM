@@ -382,7 +382,7 @@ unsigned int STRAT_AER( const double temperature_K     , const double pressure_P
             VOL_TOT       = VOL_NAT + VOL_ICE;
             KG_AER_BOX    = KG_NAT + KG_ICE;
             RAD_AER_BOX   = MIN_RAD;
-            NDENS_AER_BOX = pow( ( 3.0E+00 * VOL_TOT / ( 4.0E+00 * physConst::PI * MAX_NDENS )), 1.0E+00 / 3.0E+00 );
+            NDENS_AER_BOX = cbrt( ( 3.0E+00 * VOL_TOT / ( 4.0E+00 * physConst::PI * MAX_NDENS )));
         }
 
         /* Prevent div zero */
@@ -1371,12 +1371,12 @@ double CARSLAW_DENSITY( const double CS, const double CN, const double T_K )
 
     /* CARSLAW_DENSITY begins here! */
 
-    DENSS =   1.000E+03 + 1.2364E+02*CS - 5.600E-04*CS*T_K*T_K - 2.954E+01*pow( CS, 1.5 ) \
-            + 1.814E-04*pow( CS, 1.5 )*T_K*T_K + 2.343E+00*CS*CS - 1.487E-03*CS*CS*T_K    \
+    DENSS =   1.000E+03 + 1.2364E+02*CS - 5.600E-04*CS*T_K*T_K - 2.954E+01*CS*sqrt(CS) \
+            + 1.814E-04*CS*sqrt(CS)*T_K*T_K + 2.343E+00*CS*CS - 1.487E-03*CS*CS*T_K    \
             - 1.324E-05*CS*CS*T_K*T_K;
 
-    DENSN =   1.000E+03 + 8.5107E+01*CN - 5.043E-04*CN*T_K*T_K - 1.896E+01*pow( CN, 1.5 ) \
-            + 1.427E-04*pow( CN, 1.5 )*T_K*T_K + 1.458E+00*CN*CN - 1.198E-03*CN*CN*T_K    \
+    DENSN =   1.000E+03 + 8.5107E+01*CN - 5.043E-04*CN*T_K*T_K - 1.896E+01*CN*sqrt(CN) \
+            + 1.427E-04*CN*sqrt(CN)*T_K*T_K + 1.458E+00*CN*CN - 1.198E-03*CN*CN*T_K    \
             - 9.703E-06*CN*CN*T_K*T_K;
 
     return 1.00E+00/( (1.00E+00/DENSS*CS/(CS+CN) + 1.00E+00/DENSN*CN/(CS+CN)) );

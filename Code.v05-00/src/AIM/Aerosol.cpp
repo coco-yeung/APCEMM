@@ -48,7 +48,7 @@ namespace AIM
     /* Compute size of each bin */
     for (UInt iBin = 0; iBin < nBin; iBin++) {
         bin_Sizes[iBin] = bin_Edges[iBin + 1] - bin_Edges[iBin];
-        bin_VCenters[iBin] = 4.0 / 3.0 * PI * (pow(bin_Edges_[iBin], 3) + pow(bin_Edges_[iBin + 1], 3)) * 0.5;
+        bin_VCenters[iBin] = 4.0 / 3.0 * PI * (bin_Edges_[iBin] * bin_Edges_[iBin] * bin_Edges_[iBin] + bin_Edges_[iBin + 1] * bin_Edges_[iBin + 1] * bin_Edges_[iBin + 1]) * 0.5;
     }
 
     /* Check mean and standard deviation */
@@ -117,7 +117,7 @@ namespace AIM
         pdf(pdf) {
             for (UInt iBin = 0; iBin < nBin; iBin++) {
                 bin_Sizes[iBin] = bin_Edges[iBin + 1] - bin_Edges[iBin];
-                bin_VCenters[iBin] = 4.0 / 3.0 * PI * (pow(bin_Edges[iBin], 3) + pow(bin_Edges[iBin + 1], 3)) * 0.5;
+                bin_VCenters[iBin] = 4.0 / 3.0 * PI * (bin_Edges[iBin] * bin_Edges[iBin] * bin_Edges[iBin] + bin_Edges[iBin + 1] * bin_Edges[iBin + 1] * bin_Edges[iBin + 1]) * 0.5;
             }
         }
 
@@ -355,7 +355,8 @@ void Aerosol::addAerosolToPDF( const Aerosol &rhs ) {
 
         if (N > 0)
         {
-            return sqrt(Moment(2) / N - pow(Moment(1) / N, 2.0));
+            double Moment_1_N = Moment(1) / N;
+            return sqrt(Moment(2) / N - Moment_1_N * Moment_1_N);
         }
         else
         {
@@ -417,10 +418,10 @@ void Aerosol::addAerosolToPDF( const Aerosol &rhs ) {
         /* Compute size of each bin */
         for (UInt iBin = 0; iBin < nBin; iBin++)
         {
-            bin_VEdges[iBin] = 4.0 / 3.0 * PI * pow(bin_Edges[iBin], 3);
+            bin_VEdges[iBin] = 4.0 / 3.0 * PI * bin_Edges[iBin] * bin_Edges[iBin] * bin_Edges[iBin];
             bin_Sizes[iBin] = bin_Edges[iBin + 1] - bin_Edges[iBin];
         }
-        bin_VEdges[nBin] = 4.0 / 3.0 * PI * pow(bin_Edges[nBin], 3);
+        bin_VEdges[nBin] = 4.0 / 3.0 * PI * bin_Edges[nBin] * bin_Edges[nBin] * bin_Edges[nBin];
 
         bin_VCenters.resize(nBin, Vector_2D(Ny, Vector_1D(Nx, 0.0E+00)));
 
@@ -1692,7 +1693,8 @@ void Aerosol::addAerosolToPDF( const Aerosol &rhs ) {
 
         if (N > 0)
         {
-            return sqrt(Moment(2, jNy, iNx) / N - pow(Moment(1, jNy, iNx) / N, 2.0));
+            double Moment_1_N = Moment(1, jNy, iNx) / N;
+            return sqrt(Moment(2, jNy, iNx) / N - Moment_1_N * Moment_1_N);
         }
         else
         {
