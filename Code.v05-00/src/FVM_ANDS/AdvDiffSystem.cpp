@@ -3,6 +3,7 @@
 #include <math.h>
 #include <iostream>
 #include "APCEMM.h"
+#include <variant>
 
 namespace FVM_ANDS{
     AdvDiffSystem::AdvDiffSystem(const AdvDiffParams& params, const Vector_1D xCoords, const Vector_1D yCoords, const BoundaryConditions& bc, const Eigen::VectorXd& phi_init, vecFormat format) :
@@ -51,7 +52,7 @@ namespace FVM_ANDS{
             return Point();  // Construct directly in vector
         });
         for (size_t i = 0; i < points_.size(); ++i) {
-            bcTypeCache_[i] = points_[i].bcType();
+            bcCache_[i] = points_[i].bcType();
             directionCache_[i] = points_[i].bcDirection();
             secondBoundaryCache_[i] = points_[i].secondBoundaryConds();
             corrCache_[i] = points_[i].corrPoint();
@@ -555,12 +556,6 @@ namespace FVM_ANDS{
 
     Eigen::VectorXd AdvDiffSystem::forwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
         Eigen::VectorXd soln(nTotalPoints_);
-        // cache results outside of hotloop
-        for (const auto& point : points_) {
-            bcTypes_.push_back(std::visit([](auto&& p) { return p.bcType(); }, point));
-            directions_.push_back(std::visit([](auto&& p) { return p.bcDirection(); }, point));
-        }
-
         // double avgBackgroundCalcTime = 0;
         //Explicit Time-Stepping
         #pragma omp parallel for    \
@@ -584,7 +579,7 @@ namespace FVM_ANDS{
                 // isNorthBoundary = direction == FaceDirection::NORTH;
                 // isSouthBoundary = direction == FaceDirection::SOUTH;
 
-                FaceDirection direction = directions_[i];
+                FaceDirection direction = directionCache_[i];
                 isNorthBoundary = direction == FaceDirection::NORTH;
                 isSouthBoundary = direction == FaceDirection::SOUTH;
                 
