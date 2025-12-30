@@ -5,6 +5,8 @@
 #include "FVM_ANDS/BoundaryCondition.hpp"
 #include "FVM_ANDS_HelperFunctions.hpp"
 #include <memory>
+#include <variant>
+using PointVariant = std::variant<InteriorPoint, IntBoundPoint, GhostPoint>;
 
 namespace FVM_ANDS{
 
@@ -43,7 +45,13 @@ namespace FVM_ANDS{
             };
             inline const Eigen::VectorXd& getRHS() const { return rhs_; }
             inline const Eigen::VectorXd& phi() const { return phi_; }
-            inline const std::vector<std::unique_ptr<Point>>& points() const { return points_; }
+
+            inline const std::vector<PointVariant>& points() const { return points_; }
+            inline const std::vector<BoundaryConditionFlag>& bcCache() const { return bcCache_; }
+            inline const std::vector<FaceDirection>& directionCache() const { return directionCache_; }
+            inline const std::vector<std::optional<BoundaryCondDescription>>& secondBoundaryCache() const { return secondBoundaryCache_; };
+            inline const std::vector<int>& corrCache() const { return corrCache_; }
+            
             inline const Eigen::SparseMatrix<double, Eigen::RowMajor>& getCoefMatrix() const { 
                 // If using prebuilt matrix, this instance of AdvDiffSystem does not have its own
                 // totalCoefMatrix_, instead it holds a pointer to a shared matrix held in another AdvDiffSystem
@@ -62,6 +70,7 @@ namespace FVM_ANDS{
                 shared_totalCoefMatrixPtr_ = matrixPtr;
                 use_shared_totalCoefMatrix_ = true;
             }
+
             inline void updatePhi(const Eigen::VectorXd& phi_new){ 
                 //Need to resize to account for grid changing in size.
                 phi_.resize(nx_ * ny_ + 2*nx_ + 2*ny_);
@@ -163,7 +172,11 @@ namespace FVM_ANDS{
             Vector_1D bcVals_left_;
             Vector_1D bcVals_right_; 
             Vector_1D bcVals_bot_;
-            std::vector<std::unique_ptr<Point>> points_;
+            std::vector<PointVariant> points_;
+            std::vector<BoundaryConditionFlag> bcCache_;  // Cache bcType()
+            std::vector<FaceDirection> directionCache_;   // Cache bcDirection()
+            std::vector<std::optional<BoundaryCondDescription>> secondBounaryCache_;    // Cache secondBoundaryConds()
+            std::vector<int> corrCache_;   // Cache corrPoint()
             Eigen::SparseMatrix<double, Eigen::RowMajor> totalCoefMatrix_;
             std::shared_ptr<const Eigen::SparseMatrix<double, Eigen::RowMajor>> shared_totalCoefMatrixPtr_;
             bool use_shared_totalCoefMatrix_ = false;
@@ -176,6 +189,12 @@ namespace FVM_ANDS{
             void buildPointList();
             void buildAdvectionCoeffs(int i, double& coeff_C, double& coeff_N, double& coeff_S, double& coeff_E, double& coeff_W);
             void updateGhostNodes();
+            
+            // Helper to create points
+            template<typename T, typename... Args>
+            void addPoint(int idx, Args&&... args) {
+                points_[idx] = T{std::forward<Args>(args)...};
+            }
 
             inline bool isValidPointID(int idx) const {
                 return (idx >= 0 && idx < phi_.rows());
