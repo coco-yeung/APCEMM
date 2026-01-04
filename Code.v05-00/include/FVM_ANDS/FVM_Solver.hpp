@@ -63,7 +63,7 @@ namespace FVM_ANDS{
                 advDiffSys_.setCoefMatrix(matrix);
                 matrix_prebuilt_ = true;
             }
-            inline const std::vector<Point>& points(){
+            inline const std::vector<PointVariant>& points(){
                 return advDiffSys_.points();
             }
             const Eigen::VectorXd& calcRHS(){
