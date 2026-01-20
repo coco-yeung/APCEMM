@@ -6,7 +6,7 @@
 namespace FVM_ANDS{
     class FVM_Solver{
         public:
-            FVM_Solver(const AdvDiffParams& params, const Vector_1D xCoords, const Vector_1D yCoords, const BoundaryConditions& bc, const Eigen::VectorXd& phi_init, bool useDiagPreCond = false, int maxIters_ = 1000, double convergenceThres_ = 1e-5);
+            FVM_Solver(const AdvDiffParams& params, const Vector_1D& xCoords, const Vector_1D& yCoords, const BoundaryConditions& bc, const Eigen::VectorXd& phi_init, bool useDiagPreCond = false, int maxIters_ = 1000, double convergenceThres_ = 1e-5);
             const Eigen::VectorXd& solve();
             const Eigen::VectorXd& solve(const Eigen::VectorXd& source);
             const Eigen::VectorXd& explicitSolve();
@@ -27,6 +27,9 @@ namespace FVM_ANDS{
                 advDiffSys_.updateDiffusion(Dh, Dv);
             }
             inline void updateDiffusion(const Vector_2D& Dh, const Vector_2D& Dv){
+                advDiffSys_.updateDiffusion(Dh, Dv);
+            }
+            inline void updateDiffusion(const Eigen::VectorXd& Dh, const Eigen::VectorXd& Dv){
                 advDiffSys_.updateDiffusion(Dh, Dv);
             }
             inline void updateAdvection(double u, double v, double shear){
@@ -52,6 +55,13 @@ namespace FVM_ANDS{
             }
             inline const Eigen::SparseMatrix<double, Eigen::RowMajor>& coefMatrix(){
                 return advDiffSys_.getCoefMatrix();
+            }
+            inline std::shared_ptr<const Eigen::SparseMatrix<double, Eigen::RowMajor>> coefMatrixPtr(){
+                return advDiffSys_.getCoefMatrixPtr();
+            }
+            inline void setPrebuiltMatrix(std::shared_ptr<const Eigen::SparseMatrix<double, Eigen::RowMajor>> matrix) {
+                advDiffSys_.setCoefMatrix(matrix);
+                matrix_prebuilt_ = true;
             }
             inline const std::vector<std::unique_ptr<Point>>& points(){
                 return advDiffSys_.points();
@@ -94,6 +104,7 @@ namespace FVM_ANDS{
             double convergenceThres_;
             AdvDiffSystem advDiffSys_;
             bool useDiagPreCond_;
+            bool matrix_prebuilt_ = false;
             Eigen::DiagonalMatrix<double, -1> diagPreCond;
             Eigen::DiagonalMatrix<double, -1> diagPreCond_inv;
             Eigen::BiCGSTAB<Eigen::SparseMatrix<double, Eigen::RowMajor>, Eigen::DiagonalPreconditioner<double> > solver_;
