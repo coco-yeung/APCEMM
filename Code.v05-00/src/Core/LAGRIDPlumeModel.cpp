@@ -435,11 +435,13 @@ void LAGRIDPlumeModel::updateDiffVecs() {
         }
     }
 }
+
 void LAGRIDPlumeModel::runTransport(double timestep) {
 
     #ifdef ENABLE_TIMING
     auto start = std::chrono::high_resolution_clock::now();
     #endif
+
     //Update the zero bc to reflect grid size changes
     auto ZERO_BC = FVM_ANDS::bcFrom2DVector(iceAerosol_.getPDF()[0], true);
 
