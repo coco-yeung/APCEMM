@@ -155,13 +155,13 @@ unsigned int STRAT_AER( const double temperature_K     , const double pressure_P
     /* Calculate conversion factors for SLA */
     /* Factor to convert volume (m^3/m^3 air) to
      * surface area density (cm^2/cm^3 air) */
-    const double SLA_VA = 8.406E-08 * pow( 10.0, 12.0 * 0.751E+00 );
+    const double SLA_VA = 8.406E-08 * 1028016298.1264735114;
 
     /* Factor to convert effective radius to liquid radius (unitless) */
-    const double SLA_RR = exp( -0.173E+00 );
+    const double SLA_RR = 0.84113761484462320121169;
 
     /* Factor to convert volume (m^3/m^3) to effective radius (m) */
-    const double SLA_VR = 0.357E-06 * pow( 10.0, 12.0 * 0.249E+00 );
+    const double SLA_VR = 0.357E-06 * 972.747223776965;
 
     /* Reaction prefactors */
     double KHET_COMMON;
@@ -1182,8 +1182,8 @@ void TERNARY( const double TIN_K    , const double PIN_Pa  , const double H2OSUM
      * Mole fraction of H2SO4 in binary solution */
 
     X_H2SO4_BIN = 1.00E+00 / ( 2.00 * (KS[2]+KS[3]/T_K) ) * \
-                  (-KS[0]-KS[1]/T_K - pow( (KS[0]+KS[1]/T_K) * (KS[0]+KS[1]/T_K) \
-                   - 4.00E+00 * (KS[2]+KS[3]/T_K) * (KS[4]+KS[5]/T_K + KS[6]*log(T_K)-log(PATMH2O)), 0.50 ) );
+                  (-KS[0]-KS[1]/T_K - sqrt( (KS[0]+KS[1]/T_K) * (KS[0]+KS[1]/T_K) \
+                   - 4.00E+00 * (KS[2]+KS[3]/T_K) * (KS[4]+KS[5]/T_K + KS[6]*log(T_K)-log(PATMH2O))) );
 
     /* Molality (mol H2SO4/kg H2O) in binary solution */
     M_H2SO4_BIN = 5.551E+01 * X_H2SO4_BIN / ( 1.0E+00 - X_H2SO4_BIN );
@@ -1196,8 +1196,8 @@ void TERNARY( const double TIN_K    , const double PIN_Pa  , const double H2OSUM
                 + ( QS[6] + QS[7]*TR + QS[8]*TR*TR )*PR*PR \
                 + ( QS[9]*TR )*PR*PR*PR );
         X_HNO3_BIN = 1.00E+00 / ( 2.00 * (KN[2]+KN[3]/T_K) ) * \
-                     (-KN[0]-KN[1]/T_K - pow( (KN[0]+KN[1]/T_K) * (KN[0]+KN[1]/T_K) \
-                      -4.0E+00 * (KN[2]+KN[3]/T_K) * (KN[4]+KN[5]/T_K + KN[6]*log(T_K) - log(PATMH2O)), 0.50 ) );
+                     (-KN[0]-KN[1]/T_K - sqrt( (KN[0]+KN[1]/T_K) * (KN[0]+KN[1]/T_K) \
+                      -4.0E+00 * (KN[2]+KN[3]/T_K) * (KN[4]+KN[5]/T_K + KN[6]*log(T_K) - log(PATMH2O))) );
         /* Molality */
         M_HNO3_BIN = 5.551E+01 * X_HNO3_BIN / ( 1.0E+00 - X_HNO3_BIN );
         H_HNO3_BIN = exp( QN[0] + QN[1]*TR*TR \
