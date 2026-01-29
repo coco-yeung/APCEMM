@@ -238,10 +238,16 @@ Engine::Engine(std::string engineName, std::string engineFileName,
       8.1328E-03 *
           ((pow(10.0, 3.49149 * (1.0 - (373.16) / (tempe_K + 0.01)))) - 1.0);
   Pv = 0.014504 * pow(10.0, beta);
+
+  // simpler approximation: Guide to Meteorological Instruments and Methods of Observation (CIMO Guide)
+  // double tempe_C = tempe_K - 273.15;
+  // double ew = 6.112 * exp(17.62*(tempe_C)/(243.12 + (tempe_C))); 
+  // Pv = 0.014504 * ew;
   H = -19.0 * (0.37318 * relHum_w / 100.0 * Pv) /
       (14.696 * delta - relHum_w / 100.0 * Pv);
 
-  EI_NOx *= exp(H) * pow(pow(delta, 1.02) / pow(theta, 3.3), 0.5);
+  double cruise_correction =  pow(theta, 3.3) * pow(delta, -1.02);
+  EI_NOx *= exp(H) * sqrt(1 / cruise_correction);
 
   /* EI_NO in g(NO)/kg:
    * NOxtoNO is in mole of NO per mole of N
@@ -268,6 +274,7 @@ Engine::Engine(std::string engineName, std::string engineFileName,
 
   /* Horizontal line is bisect of two higher power values */
   horzline = log10(LTO_CO[2]) + log10(LTO_CO[3]) / 2.0;
+  // EI_CO = LTO_CO[2] * LTO_CO[3] * sqrt(10); // EI_CO = 10^horzline
 
   /* Find intercept of the two lines */
   intercept = (2 * log10(LTO_fuelflow[0]) * line1 + log10(LTO_CO[2]) +
@@ -283,6 +290,7 @@ Engine::Engine(std::string engineName, std::string engineFileName,
   else if (intercept < log10(LTO_fuelflow[1]) && (line1 < 0)) {
     horzline = log10(LTO_CO[1]);
     intercept = log10(LTO_fuelflow[1]);
+    //EI_CO = LTO_CO[1];
   }
   /* If the gradient of the slanted line is +ve, use horz line for all values
      (SAGE v1.5, Issue 3) */
@@ -299,7 +307,7 @@ Engine::Engine(std::string engineName, std::string engineFileName,
     EI_CO = pow(10.0, horzline);
 
   /* Cruise correction for CO */
-  EI_CO *= pow(theta, 3.3) / pow(delta, 1.02);
+  EI_CO *= cruise_correction;
 
   /** Computing engine CO emission index **/
   line1 = (log10(LTO_HC[1]) - log10(LTO_HC[0])) /
@@ -309,6 +317,7 @@ Engine::Engine(std::string engineName, std::string engineFileName,
 
   /* Horizontal line is bisect of two higher power values */
   horzline = log10(LTO_HC[2]) + log10(LTO_HC[3]) / 2.0;
+  // EI_HC =  LTO_HC[2] * LTO_HC[3] * sqrt(10);
 
   /* Find intercept of the two lines */
   intercept = (2 * log10(LTO_fuelflow[0]) * line1 + log10(LTO_HC[2]) +
@@ -323,6 +332,7 @@ Engine::Engine(std::string engineName, std::string engineFileName,
    * (SAGE v1.5, Issue 2) */
   else if (intercept < log10(LTO_fuelflow[1]) && (line1 < 0)) {
     horzline = log10(LTO_HC[1]);
+    // EI_HC =  LTO_HC[1];
     intercept = log10(LTO_fuelflow[1]);
   }
   /* If the gradient of the slanted line is +ve, use horz line for all values
@@ -340,7 +350,7 @@ Engine::Engine(std::string engineName, std::string engineFileName,
     EI_HC = pow(10.0, horzline);
 
   /* Cruise correction for HC */
-  EI_HC *= pow(theta, 3.3) / pow(delta, 1.02);
+  EI_HC *= cruise_correction;
 
   /** Computing engine Soot emission index **/
   EI_Soot = 0.02;     /* [g/kg fuel] */
