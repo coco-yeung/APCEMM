@@ -63,9 +63,9 @@ class AIM::Aerosol
         //NOTE: This gives the moment in [- / cm3]. You need to multiply by factors to get it in [ / m] or something.
         inline double binMoment(int iBin, int n = 0) const {
             if (n == 0){
-                return pdf[iBin]; // if n = 0, it can skip the pow() calculation
+                return (log(bin_Edges[iBin + 1]) - log(bin_Edges[iBin])) * pdf[iBin]; // if n = 0, it can skip the pow() calculation
             }
-            return pow(bin_Centers[iBin], n) * pdf[iBin]; // return without multiplying by log ratio
+            return (log(bin_Edges[iBin + 1]) - log(bin_Edges[iBin])) * pow(bin_Centers[iBin], n) * pdf[iBin]; // return without multiplying by log ratio
         }
         //NOTE: This gives the moment in [- / cm3]. You need to multiply by factors to get it in [ / m] or something.
         double Moment( UInt n = 0 ) const;

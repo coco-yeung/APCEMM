@@ -368,7 +368,7 @@ void LAGRIDPlumeModel::initializeGrid(const EPM::Output &epmOut) {
 
     for (UInt n = 0; n < iceAerosol_.getNBin(); n++) {
         double logBinRatio = log(iceAerosol_.getBinEdges()[n+1] / iceAerosol_.getBinEdges()[n]);
-        double EPM_nPart_bin = epmIceAer.binMoment(n) * epmOut.area * logBinRatio;
+        double EPM_nPart_bin = epmIceAer.binMoment(n) * epmOut.area;
         pdf_init.push_back( LAGRID::initVarToGridRectangular(EPM_nPart_bin, xEdges_, yEdges_, xcenter, ycenter, initWidth, initDepth, logBinRatio) );
 
     }
