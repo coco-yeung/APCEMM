@@ -230,19 +230,19 @@ Engine::Engine(std::string engineName, std::string engineFileName,
 
   /* Cruise correction for NOx */
   double beta, Pv, H;
-  // beta =
-  //     7.90298 * (1.0 - (373.16) / (tempe_K + 0.01)) + 3.00571 +
-  //     5.02808 * log10((373.16) / (tempe_K + 0.01)) +
-  //     1.3816E-07 *
-  //         (1.0 - (pow(10.0, 11.344 * (1.0 - ((tempe_K + 0.01) / (373.16)))))) +
-  //     8.1328E-03 *
-  //         ((pow(10.0, 3.49149 * (1.0 - (373.16) / (tempe_K + 0.01)))) - 1.0);
-  // Pv = 0.014504 * pow(10.0, beta);
+  beta =
+      7.90298 * (1.0 - (373.16) / (tempe_K + 0.01)) + 3.00571 +
+      5.02808 * log10((373.16) / (tempe_K + 0.01)) +
+      1.3816E-07 *
+          (1.0 - (pow(10.0, 11.344 * (1.0 - ((tempe_K + 0.01) / (373.16)))))) +
+      8.1328E-03 *
+          ((pow(10.0, 3.49149 * (1.0 - (373.16) / (tempe_K + 0.01)))) - 1.0);
+  Pv = 0.014504 * pow(10.0, beta);
 
   // simpler approximation: Guide to Meteorological Instruments and Methods of Observation (CIMO Guide)
-  double tempe_C = tempe_K - 273.15;
-  double ew = 6.112 * exp(17.62*(tempe_C)/(243.12 + (tempe_C))); 
-  Pv = 0.014504 * ew;
+  // double tempe_C = tempe_K - 273.15;
+  // double ew = 6.112 * exp(17.62*(tempe_C)/(243.12 + (tempe_C))); 
+  // Pv = 0.014504 * ew;
   H = -19.0 * (0.37318 * relHum_w / 100.0 * Pv) /
       (14.696 * delta - relHum_w / 100.0 * Pv);
 
