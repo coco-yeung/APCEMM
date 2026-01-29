@@ -274,7 +274,7 @@ Engine::Engine(std::string engineName, std::string engineFileName,
 
   /* Horizontal line is bisect of two higher power values */
   horzline = log10(LTO_CO[2]) + log10(LTO_CO[3]) / 2.0;
-  EI_CO = LTO_CO[2] * LTO_CO[3] * sqrt(10); // EI_CO = 10^horzline
+  // EI_CO = LTO_CO[2] * LTO_CO[3] * sqrt(10); // EI_CO = 10^horzline
 
   /* Find intercept of the two lines */
   intercept = (2 * log10(LTO_fuelflow[0]) * line1 + log10(LTO_CO[2]) +
@@ -290,7 +290,7 @@ Engine::Engine(std::string engineName, std::string engineFileName,
   else if (intercept < log10(LTO_fuelflow[1]) && (line1 < 0)) {
     horzline = log10(LTO_CO[1]);
     intercept = log10(LTO_fuelflow[1]);
-    EI_CO = LTO_CO[1];
+    //EI_CO = LTO_CO[1];
   }
   /* If the gradient of the slanted line is +ve, use horz line for all values
      (SAGE v1.5, Issue 3) */
@@ -303,6 +303,8 @@ Engine::Engine(std::string engineName, std::string engineFileName,
 
   if (log10(fuelflow_factor) < intercept && fuelflow_factor > 0)
     EI_CO = pow(10.0, line1 * (log10(fuelflow_factor) - line2) + line3);
+  else
+    EI_CO = pow(10.0, horzline);
 
   /* Cruise correction for CO */
   EI_CO *= cruise_correction;
@@ -315,7 +317,7 @@ Engine::Engine(std::string engineName, std::string engineFileName,
 
   /* Horizontal line is bisect of two higher power values */
   horzline = log10(LTO_HC[2]) + log10(LTO_HC[3]) / 2.0;
-  EI_HC =  LTO_HC[2] * LTO_HC[3] * sqrt(10);
+  // EI_HC =  LTO_HC[2] * LTO_HC[3] * sqrt(10);
 
   /* Find intercept of the two lines */
   intercept = (2 * log10(LTO_fuelflow[0]) * line1 + log10(LTO_HC[2]) +
@@ -330,7 +332,7 @@ Engine::Engine(std::string engineName, std::string engineFileName,
    * (SAGE v1.5, Issue 2) */
   else if (intercept < log10(LTO_fuelflow[1]) && (line1 < 0)) {
     horzline = log10(LTO_HC[1]);
-    EI_HC =  LTO_HC[1];
+    // EI_HC =  LTO_HC[1];
     intercept = log10(LTO_fuelflow[1]);
   }
   /* If the gradient of the slanted line is +ve, use horz line for all values
@@ -344,6 +346,8 @@ Engine::Engine(std::string engineName, std::string engineFileName,
 
   if (log10(fuelflow_factor) < intercept && fuelflow_factor > 0)
     EI_HC = pow(10.0, line1 * (log10(fuelflow_factor) - line2) + line3);
+  else
+    EI_HC = pow(10.0, horzline);
 
   /* Cruise correction for HC */
   EI_HC *= cruise_correction;
