@@ -75,7 +75,7 @@ namespace FVM_ANDS{
             inline void setSecondaryBC(BoundaryCondDescription bc) override {
                 secondary_bc_ = bc;
             }
-            inline BoundaryCondDescription* secondBoundaryConds() const override{
+            inline BoundaryCondDescription* secondBoundaryConds() override{
                 return &secondary_bc_;
             }
 
