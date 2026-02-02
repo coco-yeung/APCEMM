@@ -81,6 +81,7 @@ namespace FVM_ANDS{
 
         private:
             BoundaryCondDescription secondary_bc_;
+            bool has_secondary_bc_;
     };
     struct BoundaryConditions {
         BoundaryConditionFlag bcType_top;
