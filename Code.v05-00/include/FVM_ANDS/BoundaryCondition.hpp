@@ -50,7 +50,7 @@ namespace FVM_ANDS{
             inline virtual void setSecondaryBC(BoundaryCondDescription bc)  {
                 return;
             }
-            virtual inline BoundaryCondDescription* secondBoundaryConds() const {
+            virtual inline BoundaryCondDescription* secondBoundaryConds() {
                 return nullptr;
             }
         protected:

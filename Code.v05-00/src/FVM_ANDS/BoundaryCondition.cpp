@@ -16,12 +16,10 @@ namespace FVM_ANDS {
         setBC(bc);
     }
     IntBoundPoint::IntBoundPoint(BoundaryCondDescription bc1)
-     : Point(bc1) {
-        secondary_bc_= std::nullopt;
+     : Point(bc1), secondary_bc_() {
     }
     IntBoundPoint::IntBoundPoint(BoundaryCondDescription bc1, BoundaryCondDescription bc2)
-     : Point(bc1) {
-        secondary_bc_ = bc2;
+     : Point(bc1), secondary_bc_(bc2){
     }
 
     BoundaryCondDescription::BoundaryCondDescription()
