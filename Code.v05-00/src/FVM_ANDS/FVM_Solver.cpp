@@ -73,8 +73,7 @@ namespace FVM_ANDS{
         double dt_max = advDiffSys_.timestep();
         double dt_adv = dt_max * (courant_max / courant);
 
-        
-        
+        int n_timesteps_advection_half =  std::ceil((0.5 * dt_max) / dt_adv);
         dt_adv = (0.5 * dt_max) / n_timesteps_advection_half;
 
         #ifdef ENABLE_TIMING

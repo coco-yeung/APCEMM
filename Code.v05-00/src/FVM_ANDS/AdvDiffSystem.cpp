@@ -575,28 +575,28 @@ namespace FVM_ANDS{
                     case FaceDirection::NORTH:
                         isNorthBoundary = true;
                         idx_N = point->corrPoint();
-                        switch(point->secondBoundayConds()->direction) {
+                        switch(point->secondBoundaryConds()->direction) {
                             case FaceDirection::WEST:
                                 isWestBoundary = true;
-                                idx_W = secondBC->corrPoint;
+                                idx_W = point->secondBoundaryConds()->corrPoint;
                                 break;
                             case FaceDirection::EAST:
                                 isEastBoundary = true;
-                                idx_E = secondBC->corrPoint;
+                                idx_E = point->secondBoundaryConds()->corrPoint;
                                 break;
                         }
                         break;
                     case FaceDirection::SOUTH:
                         isSouthBoundary = true;
                         idx_S = point->corrPoint();
-                        switch(point->secondBoundayConds()->direction) {
+                        switch(point->secondBoundaryConds()->direction) {
                             case FaceDirection::WEST:
                                 isWestBoundary = true;
-                                idx_W = secondBC->corrPoint;
+                                idx_W = point->secondBoundaryConds()->corrPoint;
                                 break;
                             case FaceDirection::EAST:
                                 isEastBoundary = true;
-                                idx_E = secondBC->corrPoint;
+                                idx_E = point->secondBoundaryConds()->corrPoint;
                                 break;
                         }
                         break;
