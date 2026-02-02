@@ -76,7 +76,7 @@ namespace FVM_ANDS{
                 secondary_bc_ = bc;
             }
             inline BoundaryCondDescription* secondBoundaryConds() override{
-                return &secondary_bc_;
+                return &secondary_bc_ ? &secondary_bc_ : nullptr;
             }
 
         private:
