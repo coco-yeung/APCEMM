@@ -50,8 +50,8 @@ namespace FVM_ANDS{
             inline virtual void setSecondaryBC(BoundaryCondDescription bc)  {
                 return;
             }
-            virtual inline std::optional<BoundaryCondDescription> secondBoundaryConds() const {
-                return std::nullopt;
+            virtual inline BoundaryCondDescription* secondBoundaryConds() {
+                return nullptr;
             }
         protected:
             BoundaryCondDescription bc_;
@@ -75,12 +75,13 @@ namespace FVM_ANDS{
             inline void setSecondaryBC(BoundaryCondDescription bc) override {
                 secondary_bc_ = bc;
             }
-            inline std::optional<BoundaryCondDescription> secondBoundaryConds() const override{
-                return secondary_bc_;
+            inline BoundaryCondDescription* secondBoundaryConds() override{
+                return &secondary_bc_ ? &secondary_bc_ : nullptr;
             }
 
         private:
-            std::optional<BoundaryCondDescription> secondary_bc_;
+            BoundaryCondDescription secondary_bc_;
+            bool has_secondary_bc_;
     };
     struct BoundaryConditions {
         BoundaryConditionFlag bcType_top;

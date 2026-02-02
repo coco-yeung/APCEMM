@@ -337,8 +337,8 @@ namespace FVM_ANDS{
                 if(point->bcDirection() == direction){
                     return point->corrPoint();
                 }
-                else if (point->secondBoundaryConds() && point->secondBoundaryConds().value().direction == direction){
-                    return point->secondBoundaryConds().value().corrPoint;
+                else if (const auto* bc = point->secondBoundaryConds(); bc && bc->direction == direction) {
+                    return bc->corrPoint;
                 }
                 return neighbor_point_interior(direction, pointID);        
             }
