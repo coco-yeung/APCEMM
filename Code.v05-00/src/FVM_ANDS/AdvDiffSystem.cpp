@@ -563,44 +563,51 @@ namespace FVM_ANDS{
             if(points_[i]->bcType() != BoundaryConditionFlag::INTERIOR){
                 Point* point = points_[i].get();
                 FaceDirection direction = point->bcDirection();
-                isNorthBoundary = direction == FaceDirection::NORTH;
-                isSouthBoundary = direction == FaceDirection::SOUTH;
-
-                //Corner cases...
-                bool secondaryWestBound = (point->secondBoundaryConds() && point->secondBoundaryConds()->direction == FaceDirection::WEST);
-                bool secondaryEastBound = (point->secondBoundaryConds() && point->secondBoundaryConds()->direction == FaceDirection::EAST);
-
-                isWestBoundary = (direction == FaceDirection::WEST || secondaryWestBound);
-                isEastBoundary = (direction == FaceDirection::EAST || secondaryEastBound);
-
-                //only call this lookup function on boundary nodes which are inconsequential in number
-                idx_N = isNorthBoundary? point->corrPoint() : idx_N;
-                idx_S = isSouthBoundary? point->corrPoint() : idx_S;
-                idx_E = isEastBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_E;
-                idx_W = isWestBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_W;
+                switch(direction) {
+                    case FaceDirection::WEST:
+                        isWestBoundary = true;
+                        idx_W = point->corrPoint();
+                        break;
+                    case FaceDirection::EAST:
+                        isEastBoundary = true;
+                        idx_E = point->corrPoint();
+                        break;
+                    case FaceDirection::NORTH:
+                        isNorthBoundary = true;
+                        idx_N = point->corrPoint();
+                        switch(point->secondBoundayConds()->direction) {
+                            case FaceDirection::WEST:
+                                isWestBoundary = true;
+                                idx_W = secondBC->corrPoint;
+                                break;
+                            case FaceDirection::EAST:
+                                isEastBoundary = true;
+                                idx_E = secondBC->corrPoint;
+                                break;
+                        }
+                        break;
+                    case FaceDirection::SOUTH:
+                        isSouthBoundary = true;
+                        idx_S = point->corrPoint();
+                        switch(point->secondBoundayConds()->direction) {
+                            case FaceDirection::WEST:
+                                isWestBoundary = true;
+                                idx_W = secondBC->corrPoint;
+                                break;
+                            case FaceDirection::EAST:
+                                isEastBoundary = true;
+                                idx_E = secondBC->corrPoint;
+                                break;
+                        }
+                        break;
+                }
             }
             //When you declare these vars (inside or outside loop) has 0 impact)
             //takes ~ 6 out of 18 ns on background var calcs
 
-            //these cost almost nothing to compute but commenting out anyway for maximum performance
-            // double dphi_dx_E = (phi_[idx_E] - phi_[i]) * invdx_;
-            // double dphi_dx_W = (phi_[i] - phi_[idx_W]) * invdx_;
-            // double dphi_dy_N = (phi_[idx_N] - phi_[i]) * invdy_;
-            // double dphi_dy_S = (phi_[i] - phi_[idx_S]) * invdy_;
-            
-            //ignoreing distinction of faces saves a good amt of time
-            // double u_W = isWestBoundary? u_vec_[i] : 0.5 * (u_vec_[i] + u_vec_[idx_W]);
-            // double u_E = isEastBoundary? u_vec_[i] : 0.5 * (u_vec_[i] + u_vec_[idx_E]);
-            // double v_N = isNorthBoundary? v_vec_[i] : 0.5 * (v_vec_[i] + v_vec_[idx_N]);
-            // double v_S = isSouthBoundary? v_vec_[i] : 0.5 * (v_vec_[i] + v_vec_[idx_S]);
             double u_local = u_vec_[i];
             double v_local = v_vec_[i];
 
-            // auto stop = std::chrono::high_resolution_clock::now();
-            // auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
-            // avgBackgroundCalcTime += duration.count();
-            //std::cout << "ForwardEuler: Background Variable Calc Time: " << duration.count() << "ns" << std::endl;
-            // start = std::chrono::high_resolution_clock::now();
             double phi_N, phi_S, phi_W, phi_E;
 
             //Unraveling any of these if's into single liners hurts performance
@@ -646,11 +653,8 @@ namespace FVM_ANDS{
                 phi_E = phi_[idx_E] + 0.5 * minmod_E_vNeg(i) * (phi_[i] - phi_[idx_E]);
             }
 
-            //std::cout << "ForwardEuler: Fluxes and Update Time: " << duration.count() << "ns" << std::endl;
-
             //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
-            soln[i] = /*(!operatorSplit) * (Dh_ * dt_ * invdx_ * (dphi_dx_E - dphi_dx_W) + Dv_ * dt_ * invdy_ * (dphi_dy_N - dphi_dy_S))\*/
-                     dt_ * invdx_ * (u_local * phi_W - u_local * phi_E) + dt_ * invdy_ * (v_local * phi_S - v_local * phi_N)\
+            soln[i] = dt_ * invdx_ * (u_local * phi_W - u_local * phi_E) + dt_ * invdy_ * (v_local * phi_S - v_local * phi_N)\
                     + source_[i] * dt_ + phi_[i];
             // stop = std::chrono::high_resolution_clock::now();
             // duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
