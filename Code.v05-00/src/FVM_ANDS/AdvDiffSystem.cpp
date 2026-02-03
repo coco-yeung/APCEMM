@@ -2,6 +2,7 @@
 #include <chrono>
 #include <math.h>
 #include <iostream>
+#include <Eigen/IterativeLinearSolvers>
 #include "APCEMM.h"
 
 namespace FVM_ANDS{
@@ -660,52 +661,28 @@ namespace FVM_ANDS{
     }
     
 void sor_solve(const Eigen::SparseMatrix<double, Eigen::RowMajor> &A, const Eigen::VectorXd &rhs, Eigen::VectorXd &phi, double omega, double threshold, int n_iters) {
-    /*
-    diagCoeff should always be overwritten in the for loop
-    before we get to "x_i *= omega / diagCoeff;"
-    Setting it to 0 instead of leaving uninitialized guarantees
-    that we get an error if for some reason diagCoeff is not overwritten
-    Not sure how to do this better for now...
-    */ 
-    // Get matrix pointers ONCE
-    const double* valuePtr = A.valuePtr();
-    const int* innerIdxPtr = A.innerIndexPtr();
-    const int* outerIdxPtr = A.outerIndexPtr();
+    // BiCGSTAB - good general purpose solver
+    Eigen::BiCGSTAB<Eigen::SparseMatrix<double>, Eigen::IncompleteLUT<double>> solver;
     
-    // Precompute diagonal coefficients ONCE
-    std::vector<double> omegaOverDiag(rhs.size());
-    for (int i = 0; i < rhs.size(); i++) {
-        for (int j = outerIdxPtr[i]; j < outerIdxPtr[i + 1]; j++) {
-            if (innerIdxPtr[j] == i) {
-                omegaOverDiag[i] = omega / valuePtr[j];
-                break;
-            }
-        }
+    // Or for symmetric problems (diffusion often is):
+    // Eigen::ConjugateGradient<Eigen::SparseMatrix<double>> solver;
+    
+    solver.setMaxIterations(500);
+    solver.setTolerance(threshold);
+    solver.compute(A);
+    
+    if (solver.info() != Eigen::Success) {
+        throw std::runtime_error("Decomposition failed");
     }
     
-    const double one_minus_omega = 1.0 - omega;
-    double residual = 1.0;
-
-    while(residual > threshold){
-        for(int iteration = 0; iteration < n_iters; iteration++) {
-            for (int i = 0; i < rhs.size(); i++) {
-                double x_i = rhs[i];
-                const int rowEnd = outerIdxPtr[i + 1];
-                
-                for (int j = outerIdxPtr[i]; j < rowEnd; j++) {
-                    const int col = innerIdxPtr[j];
-                    if (col != i) {
-                        x_i -= valuePtr[j] * phi[col];
-                    }
-                }
-                
-                phi[i] = omegaOverDiag[i] * x_i + one_minus_omega * phi[i];
-            }
-        }
+    phi = solver.solve(rhs);
     
-        residual = (A * phi - rhs).eval().lpNorm<2>() / rhs.lpNorm<2>();
-        if (isnan(residual)) throw std::runtime_error("NaN residual encountered");
-    } // end while loop
+    if (solver.info() != Eigen::Success) {
+        throw std::runtime_error("Solving failed");
+    }
+    
+    std::cout << "Iterations: " << solver.iterations() << "\n";
+    std::cout << "Error: " << solver.error() << "\n";
 
 }
 
