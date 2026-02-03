@@ -667,39 +667,43 @@ void sor_solve(const Eigen::SparseMatrix<double, Eigen::RowMajor> &A, const Eige
     that we get an error if for some reason diagCoeff is not overwritten
     Not sure how to do this better for now...
     */ 
-    double diagCoeff = 0;
-    double residual = 1;
+    // Get matrix pointers ONCE
+    const double* valuePtr = A.valuePtr();
+    const int* innerIdxPtr = A.innerIndexPtr();
+    const int* outerIdxPtr = A.outerIndexPtr();
+    
+    // Precompute diagonal coefficients ONCE
+    std::vector<double> omegaOverDiag(rhs.size());
+    for (int i = 0; i < rhs.size(); i++) {
+        for (int j = outerIdxPtr[i]; j < outerIdxPtr[i + 1]; j++) {
+            if (innerIdxPtr[j] == i) {
+                omegaOverDiag[i] = omega / valuePtr[j];
+                break;
+            }
+        }
+    }
+    
+    const double one_minus_omega = 1.0 - omega;
+    double residual = 1.0;
 
     while(residual > threshold){
-        const double* valuePtr = A.valuePtr();
-        const int* innerIdxPtr = A.innerIndexPtr();
-        const int* outerIdxPtr = A.outerIndexPtr();
-
-        for(int iteration = 0; iteration < n_iters; iteration++){
-            int outerIdx = 0;
-
+        for(int iteration = 0; iteration < n_iters; iteration++) {
             for (int i = 0; i < rhs.size(); i++) {
-                double x_i = 0;
-                int rowStartIdx = outerIdxPtr[outerIdx];
-                int rowEndIdx = outerIdxPtr[outerIdx + 1];
-                for (int j = rowStartIdx; j < rowEndIdx; j++) {
-
-                    if (innerIdxPtr[j] == i) {
-                        diagCoeff = valuePtr[j];
-                        continue;
+                double x_i = rhs[i];
+                const int rowEnd = outerIdxPtr[i + 1];
+                
+                for (int j = outerIdxPtr[i]; j < rowEnd; j++) {
+                    const int col = innerIdxPtr[j];
+                    if (col != i) {
+                        x_i -= valuePtr[j] * phi[col];
                     }
-                    x_i -= valuePtr[j] * phi[innerIdxPtr[j]];
                 }
-                x_i += rhs[i];
-
-                x_i *= omega / diagCoeff;
-                x_i += (1 - omega) * phi[i];
-                phi[i] = x_i;
-                outerIdx++;
-            } // end inner for loop
-        } // end iters for loop
+                
+                phi[i] = omegaOverDiag[i] * x_i + one_minus_omega * phi[i];
+            }
+        }
     
-        residual = (A * phi - rhs).eval().lpNorm<2>()/ rhs.lpNorm<2>();
+        residual = (A * phi - rhs).eval().lpNorm<2>() / rhs.lpNorm<2>();
         if (isnan(residual)) throw std::runtime_error("NaN residual encountered");
     } // end while loop
 
