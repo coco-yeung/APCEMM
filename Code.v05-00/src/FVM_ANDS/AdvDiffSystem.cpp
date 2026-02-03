@@ -680,9 +680,6 @@ void sor_solve(const Eigen::SparseMatrix<double, Eigen::RowMajor> &A, const Eige
     if (solver.info() != Eigen::Success) {
         throw std::runtime_error("Solving failed");
     }
-    
-    std::cout << "Iterations: " << solver.iterations() << "\n";
-    std::cout << "Error: " << solver.error() << "\n";
 
 }
 
