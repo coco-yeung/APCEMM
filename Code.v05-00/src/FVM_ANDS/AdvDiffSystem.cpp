@@ -47,6 +47,7 @@ namespace FVM_ANDS{
         std::generate_n(std::back_inserter(points_), nTotalPoints_, [] { 
             return Point();  // Construct directly in vector
         });
+        totalCoefMatrix_.resize(nTotalPoints_, nTotalPoints_);
 
         #ifdef ENABLE_TIMING
         auto start = std::chrono::high_resolution_clock::now();
