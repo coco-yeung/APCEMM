@@ -473,7 +473,7 @@ namespace FVM_ANDS{
             int bPointID_left = twoDIdx_to_vecIdx(0, j, nx_, ny_, format_);
             switch(bcType_left_){
                 case BoundaryConditionFlag::DIRICHLET_INT_BPOINT: {
-                    visitPoint(bcType_left_, [&](auto& point) {
+                    visitPoint(bPointID_left, [&](auto& point) {
                         int ghostPointID = point.corrPoint();
                         phi_[ghostPointID] = 2 * point.bcVal() - phi_[bPointID_left];
                     });
