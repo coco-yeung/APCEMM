@@ -204,24 +204,26 @@ namespace FVM_ANDS{
         for(int i = 0; i < nTotalPoints_; i++){
             bool isGhost = std::visit([](const auto& p) { return p.isGhost(); }, points_[i]);
             if(isGhost()){
-                switch(points_[i]->bcType()){
-                    case BoundaryConditionFlag::DIRICHLET_GHOSTPOINT:{
-                        // (phi_int + phi_ghost) / 2 = phi_boundary
-                        // if inhomog, the bc value will appear in the rhs.
-                        tripletList.emplace_back(i, i, 0.5);
-                        tripletList.emplace_back(i, points_[i]->corrPoint(), 0.5);
-                        break;
+                visitPoint(currIdx, [&](auto& point) {
+                    switch(point.bcType()){
+                        case BoundaryConditionFlag::DIRICHLET_GHOSTPOINT:{
+                            // (phi_int + phi_ghost) / 2 = phi_boundary
+                            // if inhomog, the bc value will appear in the rhs.
+                            tripletList.emplace_back(i, i, 0.5);
+                            tripletList.emplace_back(i, point.corrPoint(), 0.5);
+                            break;
+                        }
+                        case BoundaryConditionFlag::PERIODIC_GHOSTPOINT:{
+                            // Ghost node will exactly equal to the cell on the other end of the domain
+                            // effectively makes opposite ends of the domain neighbor points.
+                            throw std::runtime_error("Periodic BCs not yet implemented.");
+                            break;
+                        }
+                        default: {
+                            throw std::runtime_error("Ghost point doesn't have a bcType associated with being a ghost point!");
+                        }
                     }
-                    case BoundaryConditionFlag::PERIODIC_GHOSTPOINT:{
-                        // Ghost node will exactly equal to the cell on the other end of the domain
-                        // effectively makes opposite ends of the domain neighbor points.
-                        throw std::runtime_error("Periodic BCs not yet implemented.");
-                        break;
-                    }
-                    default: {
-                        throw std::runtime_error("Ghost point doesn't have a bcType associated with being a ghost point!");
-                    }
-                }
+                });
                 continue;
             }
 
@@ -260,17 +262,19 @@ namespace FVM_ANDS{
         //Therefore, that term goes to the RHS and the contribution of that face to the coeffs goes to 0.
 
         bool isNorthBoundary = 0, isWestBoundary = 0, isEastBoundary = 0, isSouthBoundary = 0;
-        if(points_[i]->bcType() != BoundaryConditionFlag::INTERIOR){
-            isNorthBoundary = points_[i]->bcDirection() == FaceDirection::NORTH;
-            isSouthBoundary = points_[i]->bcDirection() == FaceDirection::SOUTH;
+        visitPoint(currIdx, [&](auto& point) {
+            if(point.bcType() != BoundaryConditionFlag::INTERIOR){
+            isNorthBoundary = point.bcDirection() == FaceDirection::NORTH;
+            isSouthBoundary = point.bcDirection() == FaceDirection::SOUTH;
 
             //Corner cases...
-            bool secondaryWestBound = (points_[i]->secondBoundaryConds() && points_[i]->secondBoundaryConds().value().direction == FaceDirection::WEST);
-            bool secondaryEastBound = (points_[i]->secondBoundaryConds() && points_[i]->secondBoundaryConds().value().direction == FaceDirection::EAST);
+            bool secondaryWestBound = (point.secondBoundaryConds() && point.secondBoundaryConds().value().direction == FaceDirection::WEST);
+            bool secondaryEastBound = (point.secondBoundaryConds() && point.secondBoundaryConds().value().direction == FaceDirection::EAST);
 
-            isWestBoundary = (points_[i]->bcDirection() == FaceDirection::WEST || secondaryWestBound);
-            isEastBoundary = (points_[i]->bcDirection() == FaceDirection::EAST || secondaryEastBound);
-        }
+            isWestBoundary = (point.bcDirection() == FaceDirection::WEST || secondaryWestBound);
+            isEastBoundary = (point.bcDirection() == FaceDirection::EAST || secondaryEastBound);
+            }
+        });
 
         int idx_E = neighbor_point(FaceDirection::EAST, i);
         int idx_W = neighbor_point(FaceDirection::WEST, i);
@@ -317,73 +321,80 @@ namespace FVM_ANDS{
 
     const Eigen::VectorXd& AdvDiffSystem::calcRHS(){
         for(int i = 0; i < nTotalPoints_; i++){
-            bool isGhost = std::visit([](const auto& p) { return p.isGhost(); }, points_[i]);
-            if(isGhost()){
-                switch(points_[i]->bcType()){
-                    case BoundaryConditionFlag::DIRICHLET_GHOSTPOINT:{
-                        // Equation: (phi_int + phi_ghost) / 2 = phi_boundary
-                        rhs_[i] = points_[i]->bcVal();
+            visitPoint(currIdx, [&](auto& point) {
+                    bool isGhost = point.isGhost();
+                    auto bcTypeVal = point.bcType();
+                    auto bcValVal = point.bcVal();
+            
+                if(isGhost()){
+                    switch(bcTypeVal){
+                        case BoundaryConditionFlag::DIRICHLET_GHOSTPOINT:{
+                            // Equation: (phi_int + phi_ghost) / 2 = phi_boundary
+                            rhs_[i] = bcValVal;
+                            break;
+                        }
+                        case BoundaryConditionFlag::PERIODIC_GHOSTPOINT:{
+                            // Ghost node will exactly equal to the cell on the other end of the domain
+                            // effectively makes opposite ends of the domain neighbor points.
+                            throw std::runtime_error("Periodic BCs not yet implemented.");
+                            break;
+                        }
+                        default: {
+                            throw std::runtime_error("Ghost point doesn't have a bcType associated with being a ghost point!");
+                        }                
+                    }
+                    continue;
+                }
+
+                switch(bcTypeVal){
+                    case BoundaryConditionFlag::INTERIOR:{
+                        rhs_[i] = phi_[i] + deferredCorr_[i] + source_[i]*dt_;
                         break;
                     }
-                    case BoundaryConditionFlag::PERIODIC_GHOSTPOINT:{
-                        // Ghost node will exactly equal to the cell on the other end of the domain
-                        // effectively makes opposite ends of the domain neighbor points.
+                    case BoundaryConditionFlag::DIRICHLET_INT_BPOINT:{
+                        auto bcDirectionVal = point.bcDirection();
+                        rhs_[i] = phi_[i] + deferredCorr_[i] + source_[i]*dt_;
+                        switch(bcDirectionVal){
+                            case FaceDirection::NORTH:
+                                rhs_[i] -= v_vec_[i] * dt_ / dy_ * bcValVal;
+                                break;
+                            case FaceDirection::SOUTH:
+                                rhs_[i] += v_vec_[i] * dt_ / dy_ * bcValVal;
+                                break;
+                            case FaceDirection::EAST:
+                                rhs_[i] -= u_vec_[i] * dt_ / dx_ * bcValVal;
+                                break;
+                            case FaceDirection::WEST:
+                                rhs_[i] += u_vec_[i] * dt_ / dx_ * bcValVal;
+                                break;
+                            case FaceDirection::ERROR:
+                                throw std::runtime_error("Invalid FaceDirection in Dirichlet boundary condition");
+                        }
+                        auto secondVal = point.secondBoundaryConds();
+                        if (!secondVal) break;
+                        BoundaryCondDescription bc_2 = secondVal.value();
+                        switch(bc_2.direction){
+                            case FaceDirection::EAST:
+                                rhs_[i] -= u_vec_[i] * dt_ / dx_ * bc_2.bcVal;
+                                break;
+                            case FaceDirection::WEST:
+                                rhs_[i] += u_vec_[i] * dt_ / dx_ * bc_2.bcVal;
+                                break;
+                            default:
+                                throw std::runtime_error("Can't have anything but EAST or WEST as secondary BC!");
+                        }
+                        break;
+                    }
+                    case BoundaryConditionFlag::PERIODIC_INT_BPOINT:{
                         throw std::runtime_error("Periodic BCs not yet implemented.");
                         break;
                     }
                     default: {
-                        throw std::runtime_error("Ghost point doesn't have a bcType associated with being a ghost point!");
+                        throw std::runtime_error("Interior boundary point has invalid bcType");
                     }                
                 }
                 continue;
-            }
-
-            switch(points_[i]->bcType()){
-                case BoundaryConditionFlag::INTERIOR:{
-                    rhs_[i] = phi_[i] + deferredCorr_[i] + source_[i]*dt_;
-                    break;
-                }
-                case BoundaryConditionFlag::DIRICHLET_INT_BPOINT:{
-                    rhs_[i] = phi_[i] + deferredCorr_[i] + source_[i]*dt_;
-                    switch(points_[i]->bcDirection()){
-                        case FaceDirection::NORTH:
-                            rhs_[i] -= v_vec_[i] * dt_ / dy_ * points_[i]->bcVal();
-                            break;
-                        case FaceDirection::SOUTH:
-                            rhs_[i] += v_vec_[i] * dt_ / dy_ * points_[i]->bcVal();
-                            break;
-                        case FaceDirection::EAST:
-                            rhs_[i] -= u_vec_[i] * dt_ / dx_ * points_[i]->bcVal();
-                            break;
-                        case FaceDirection::WEST:
-                            rhs_[i] += u_vec_[i] * dt_ / dx_ * points_[i]->bcVal();
-                            break;
-                        case FaceDirection::ERROR:
-                            throw std::runtime_error("Invalid FaceDirection in Dirichlet boundary condition");
-                    }
-                    if (!points_[i]->secondBoundaryConds()) break;
-                    BoundaryCondDescription bc_2 = points_[i]->secondBoundaryConds().value();
-                    switch(bc_2.direction){
-                        case FaceDirection::EAST:
-                            rhs_[i] -= u_vec_[i] * dt_ / dx_ * bc_2.bcVal;
-                            break;
-                        case FaceDirection::WEST:
-                            rhs_[i] += u_vec_[i] * dt_ / dx_ * bc_2.bcVal;
-                            break;
-                        default:
-                            throw std::runtime_error("Can't have anything but EAST or WEST as secondary BC!");
-                    }
-                    break;
-                }
-                case BoundaryConditionFlag::PERIODIC_INT_BPOINT:{
-                    throw std::runtime_error("Periodic BCs not yet implemented.");
-                    break;
-                }
-                default: {
-                    throw std::runtime_error("Interior boundary point has invalid bcType");
-                }                
-            }
-            continue;
+            });
         }
 
         return rhs_;
@@ -395,8 +406,10 @@ namespace FVM_ANDS{
             int bPointID_top = twoDIdx_to_vecIdx(i, ny_ - 1, nx_, ny_, format_);
             switch(bcType_top_){
                 case BoundaryConditionFlag::DIRICHLET_INT_BPOINT: {
-                    int ghostPointID = points_[bPointID_top]->corrPoint();
-                    phi_[ghostPointID] = 2 * points_[bPointID_top]->bcVal() - phi_[bPointID_top];
+                    visitPoint(bPointID_top, [&](auto& point) {
+                        int ghostPointID = point.corrPoint();
+                        phi_[ghostPointID] = 2 * point.bcVal() - phi_[bPointID_top];
+                    });
                     break;
                 }
                 default: {
@@ -408,8 +421,10 @@ namespace FVM_ANDS{
             int bPointID_bot = twoDIdx_to_vecIdx(i, 0, nx_, ny_, format_);
             switch(bcType_bot_){
                 case BoundaryConditionFlag::DIRICHLET_INT_BPOINT: {
-                    int ghostPointID = points_[bPointID_bot]->corrPoint();
-                    phi_[ghostPointID] = 2 * points_[bPointID_bot]->bcVal() - phi_[bPointID_bot];
+                    visitPoint(bPointID_bot, [&](auto& point) {
+                        int ghostPointID = point.corrPoint();
+                        phi_[ghostPointID] = 2 * point.bcVal() - phi_[bPointID_bot];
+                    });
                     break;
                 }
                 default: {
@@ -423,39 +438,45 @@ namespace FVM_ANDS{
             //corner cases
             if(j == 0 || j == ny_ - 1){
                 int bPointID_cornerLeft = twoDIdx_to_vecIdx(0, j, nx_, ny_, format_);
-                int ghostPointID = points_[bPointID_cornerLeft]->secondBoundaryConds().value().corrPoint;
-                double bcVal =  points_[bPointID_cornerLeft]->secondBoundaryConds().value().bcVal;
-                switch(bcType_left_){
-                    case BoundaryConditionFlag::DIRICHLET_INT_BPOINT: {
-                        phi_[ghostPointID] = 2 * bcVal - phi_[bPointID_cornerLeft];
-                        break;
+                visitPoint(bPointID_cornerLeft, [&](auto& point) {
+                    int ghostPointID = point.secondBoundaryConds().value().corrPoint;
+                    double bcVal =  point.secondBoundaryConds().value().bcVal;
+                
+                    switch(bcType_left_){
+                        case BoundaryConditionFlag::DIRICHLET_INT_BPOINT: {
+                            phi_[ghostPointID] = 2 * bcVal - phi_[bPointID_cornerLeft];
+                            break;
+                        }
+                        default: {
+                            throw std::runtime_error("Chosen boundary condition not implemented yet");
+                        }
                     }
-                    default: {
-                        throw std::runtime_error("Chosen boundary condition not implemented yet");
-                    }
-                }
-
+                });
                 int bPointID_cornerRight = twoDIdx_to_vecIdx(nx_ - 1, j, nx_, ny_, format_);
-                ghostPointID = points_[bPointID_cornerRight]->secondBoundaryConds().value().corrPoint;
-                bcVal = points_[bPointID_cornerRight]->secondBoundaryConds().value().bcVal;
-
-                switch(bcType_right_){
-                    case BoundaryConditionFlag::DIRICHLET_INT_BPOINT: {
-                        phi_[ghostPointID] = 2 * bcVal - phi_[bPointID_cornerRight];
-                        break;
+                visitPoint(bPointID_cornerRight, [&](auto& point) {
+                    int ghostPointID = point.secondBoundaryConds().value().corrPoint;
+                    double bcVal =  point.secondBoundaryConds().value().bcVal;
+                
+                    switch(bcType_right_){
+                        case BoundaryConditionFlag::DIRICHLET_INT_BPOINT: {
+                            phi_[ghostPointID] = 2 * bcVal - phi_[bPointID_cornerRight];
+                            break;
+                        }
+                        default: {
+                            throw std::runtime_error("Chosen boundary condition not implemented yet");
+                        }
                     }
-                    default: {
-                        throw std::runtime_error("Chosen boundary condition not implemented yet");
-                    }
-                }
+                });
             }
 
             //left
             int bPointID_left = twoDIdx_to_vecIdx(0, j, nx_, ny_, format_);
             switch(bcType_left_){
                 case BoundaryConditionFlag::DIRICHLET_INT_BPOINT: {
-                    int ghostPointID = points_[bPointID_left]->corrPoint();
-                    phi_[ghostPointID] = 2 * points_[bPointID_left]->bcVal() - phi_[bPointID_left];
+                    visitPoint(bPointID_bot, [&](auto& point) {
+                        int ghostPointID = point.corrPoint();
+                        phi_[ghostPointID] = 2 * point.bcVal() - phi_[bPointID_left];
+                    });
                     break;
                 }
                 default: {
@@ -466,8 +487,10 @@ namespace FVM_ANDS{
             int bPointID_right = twoDIdx_to_vecIdx(nx_ - 1, j, nx_, ny_, format_);
             switch(bcType_right_){
                 case BoundaryConditionFlag::DIRICHLET_INT_BPOINT: {
-                    int ghostPointID = points_[bPointID_right]->corrPoint();
-                    phi_[ghostPointID] = 2 * points_[bPointID_right]->bcVal() - phi_[bPointID_right];
+                    visitPoint(bPointID_right, [&](auto& point) {
+                        int ghostPointID = point.corrPoint();
+                        phi_[ghostPointID] = 2 * point.bcVal() - phi_[bPointID_right];
+                    });
                     break;
                 }
                 default: {
@@ -491,8 +514,8 @@ namespace FVM_ANDS{
         int currIdx = nInteriorPoints_;
         //top
         for(int i = 0; i < nx_; i++){
-            int corrPointID = points_[currIdx]->corrPoint();
             visitPoint(currIdx, [&](auto& point) {
+                corrPointID = point.corrPoint();
                 point.setBCType(bcType_top_);
                 point.setBCVal(bcVals_top_[i]);
             });
@@ -504,7 +527,9 @@ namespace FVM_ANDS{
         }
         //left
         for(int i = 0; i < ny_; i++){
-            int corrPointID = points_[currIdx]->corrPoint();
+            visitPoint(currIdx, [&](auto& point) {
+                corrPointID = point.corrPoint();
+            });
             if(i == 0 || i == ny_ - 1){
                 visitPoint(currIdx, [&](auto& point) {
                     point.setBCType(bcType_left_);
@@ -529,7 +554,9 @@ namespace FVM_ANDS{
         }
         //right
         for(int i = 0; i < ny_; i++){
-            int corrPointID = points_[currIdx]->corrPoint();
+            visitPoint(currIdx, [&](auto& point) {
+                corrPointID = point.corrPoint();
+            });
             if(i == 0 || i == ny_ - 1){
                 visitPoint(currIdx, [&](auto& point) {
                     point.setBCType(bcType_right_);
@@ -553,8 +580,8 @@ namespace FVM_ANDS{
         }
         //bot
         for(int i = 0; i < nx_; i++){
-            int ccorrPointID = points_[currIdx]->corrPoint();
             visitPoint(currIdx, [&](auto& point) {
+                corrPointID = point.corrPoint();
                 point.setBCType(bcType_bot_);
                 point.setBCVal(bcVals_bot_[i]);
             });
@@ -586,101 +613,104 @@ namespace FVM_ANDS{
 
             //commenting out this results in ~30% speedup
             //The calls involving the optional are maybe 1/3 of the cost. Maybe something to look at later.
-            if(points_[i]->bcType() != BoundaryConditionFlag::INTERIOR){
-                Point* point = points_[i].get();
-                FaceDirection direction = point->bcDirection();
-                isNorthBoundary = direction == FaceDirection::NORTH;
-                isSouthBoundary = direction == FaceDirection::SOUTH;
+            visitPoint(i, [&](auto& point) {
+                if(point.bcType() != BoundaryConditionFlag::INTERIOR){
+                    FaceDirection direction = point.bcDirection();
+                    isNorthBoundary = direction == FaceDirection::NORTH;
+                    isSouthBoundary = direction == FaceDirection::SOUTH;
 
-                //Corner cases...
-                bool secondaryWestBound = (point->secondBoundaryConds() && point->secondBoundaryConds()->direction == FaceDirection::WEST);
-                bool secondaryEastBound = (point->secondBoundaryConds() && point->secondBoundaryConds()->direction == FaceDirection::EAST);
+                    auto secondBC = point.secondBoundaryConds();
 
-                isWestBoundary = (direction == FaceDirection::WEST || secondaryWestBound);
-                isEastBoundary = (direction == FaceDirection::EAST || secondaryEastBound);
+                    //Corner cases...
+                    bool secondaryWestBound = (secondBC && secondBC->direction == FaceDirection::WEST);
+                    bool secondaryEastBound = (secondBC && secondBC->direction == FaceDirection::EAST);
 
-                //only call this lookup function on boundary nodes which are inconsequential in number
-                idx_N = isNorthBoundary? point->corrPoint() : idx_N;
-                idx_S = isSouthBoundary? point->corrPoint() : idx_S;
-                idx_E = isEastBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_E;
-                idx_W = isWestBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_W;
-            }
-            //When you declare these vars (inside or outside loop) has 0 impact)
-            //takes ~ 6 out of 18 ns on background var calcs
+                    isWestBoundary = (direction == FaceDirection::WEST || secondaryWestBound);
+                    isEastBoundary = (direction == FaceDirection::EAST || secondaryEastBound);
 
-            //these cost almost nothing to compute but commenting out anyway for maximum performance
-            // double dphi_dx_E = (phi_[idx_E] - phi_[i]) * invdx_;
-            // double dphi_dx_W = (phi_[i] - phi_[idx_W]) * invdx_;
-            // double dphi_dy_N = (phi_[idx_N] - phi_[i]) * invdy_;
-            // double dphi_dy_S = (phi_[i] - phi_[idx_S]) * invdy_;
-            
-            //ignoreing distinction of faces saves a good amt of time
-            // double u_W = isWestBoundary? u_vec_[i] : 0.5 * (u_vec_[i] + u_vec_[idx_W]);
-            // double u_E = isEastBoundary? u_vec_[i] : 0.5 * (u_vec_[i] + u_vec_[idx_E]);
-            // double v_N = isNorthBoundary? v_vec_[i] : 0.5 * (v_vec_[i] + v_vec_[idx_N]);
-            // double v_S = isSouthBoundary? v_vec_[i] : 0.5 * (v_vec_[i] + v_vec_[idx_S]);
-            double u_local = u_vec_[i];
-            double v_local = v_vec_[i];
+                    //only call this lookup function on boundary nodes which are inconsequential in number
+                    idx_N = isNorthBoundary? point.corrPoint() : idx_N;
+                    idx_S = isSouthBoundary? point.corrPoint() : idx_S;
+                    idx_E = isEastBoundary? (secondaryEastBound ? secondBC->corrPoint : point.corrPoint()) : idx_E;
+                    idx_W = isWestBoundary? (secondaryEastBound ? secondBC->corrPoint : point.corrPoint()) : idx_W;
+                }
+                //When you declare these vars (inside or outside loop) has 0 impact)
+                //takes ~ 6 out of 18 ns on background var calcs
 
-            // auto stop = std::chrono::high_resolution_clock::now();
-            // auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
-            // avgBackgroundCalcTime += duration.count();
-            //std::cout << "ForwardEuler: Background Variable Calc Time: " << duration.count() << "ns" << std::endl;
-            // start = std::chrono::high_resolution_clock::now();
-            double phi_N, phi_S, phi_W, phi_E;
+                //these cost almost nothing to compute but commenting out anyway for maximum performance
+                // double dphi_dx_E = (phi_[idx_E] - phi_[i]) * invdx_;
+                // double dphi_dx_W = (phi_[i] - phi_[idx_W]) * invdx_;
+                // double dphi_dy_N = (phi_[idx_N] - phi_[i]) * invdy_;
+                // double dphi_dy_S = (phi_[i] - phi_[idx_S]) * invdy_;
+                
+                //ignoreing distinction of faces saves a good amt of time
+                // double u_W = isWestBoundary? u_vec_[i] : 0.5 * (u_vec_[i] + u_vec_[idx_W]);
+                // double u_E = isEastBoundary? u_vec_[i] : 0.5 * (u_vec_[i] + u_vec_[idx_E]);
+                // double v_N = isNorthBoundary? v_vec_[i] : 0.5 * (v_vec_[i] + v_vec_[idx_N]);
+                // double v_S = isSouthBoundary? v_vec_[i] : 0.5 * (v_vec_[i] + v_vec_[idx_S]);
+                double u_local = u_vec_[i];
+                double v_local = v_vec_[i];
 
-            //Unraveling any of these if's into single liners hurts performance
-            //Killing the branching completely into 1 statement (not possible) only results in ~10% speedup (not worth it)
-            //Using only first order upwind can result in a ~40% speedup of the total advection calc.
-            //So... there is significantly more cost from actually doing the calculation than from branching.
-            if(isNorthBoundary){
-                phi_N = points_[i]->bcVal();
-            }
-            else if (v_local >= 0){
-                phi_N = phi_[i] + 0.5 * minmod_N_vPos(i) * (phi_[idx_N] - phi_[i]);
-            }
-            else {
-                phi_N = phi_[idx_N] + 0.5 * minmod_N_vNeg(i) * (phi_[i] - phi_[idx_N]);
-            }
-            if(isSouthBoundary){
-                phi_S = points_[i]->bcVal();
-            }
-            else if (v_local >= 0){
-                phi_S = phi_[idx_S] +  0.5 * minmod_S_vPos(i) * (phi_[i] - phi_[idx_S]);
-            }
-            else {
-                phi_S = phi_[i] +  0.5 * minmod_S_vNeg(i) * (phi_[idx_S] - phi_[i]);
-            }
+                // auto stop = std::chrono::high_resolution_clock::now();
+                // auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
+                // avgBackgroundCalcTime += duration.count();
+                //std::cout << "ForwardEuler: Background Variable Calc Time: " << duration.count() << "ns" << std::endl;
+                // start = std::chrono::high_resolution_clock::now();
+                double phi_N, phi_S, phi_W, phi_E;
 
-            if(isWestBoundary){
-                phi_W = secondaryWestBound ? points_[i]->secondBoundaryConds().value().bcVal : points_[i]->bcVal();
-            }
-            else if (u_local >= 0){
-                phi_W = phi_[idx_W] + 0.5 * minmod_W_vPos(i) * (phi_[i] - phi_[idx_W]);
-            }
-            else {
-                phi_W = phi_[i] + 0.5 * minmod_W_vNeg(i) * (phi_[idx_W] - phi_[i]);
-            }
+                //Unraveling any of these if's into single liners hurts performance
+                //Killing the branching completely into 1 statement (not possible) only results in ~10% speedup (not worth it)
+                //Using only first order upwind can result in a ~40% speedup of the total advection calc.
+                //So... there is significantly more cost from actually doing the calculation than from branching.
+                if(isNorthBoundary){
+                    phi_N = point.bcVal();
+                }
+                else if (v_local >= 0){
+                    phi_N = phi_[i] + 0.5 * minmod_N_vPos(i) * (phi_[idx_N] - phi_[i]);
+                }
+                else {
+                    phi_N = phi_[idx_N] + 0.5 * minmod_N_vNeg(i) * (phi_[i] - phi_[idx_N]);
+                }
+                if(isSouthBoundary){
+                    phi_S = point.bcVal();
+                }
+                else if (v_local >= 0){
+                    phi_S = phi_[idx_S] +  0.5 * minmod_S_vPos(i) * (phi_[i] - phi_[idx_S]);
+                }
+                else {
+                    phi_S = phi_[i] +  0.5 * minmod_S_vNeg(i) * (phi_[idx_S] - phi_[i]);
+                }
 
-            if(isEastBoundary){
-                phi_E = secondaryEastBound ? points_[i]->secondBoundaryConds().value().bcVal : points_[i]->bcVal();
-            }
-            else if (u_local >= 0){
-                phi_E = phi_[i] + 0.5 * minmod_E_vPos(i) * (phi_[idx_E] - phi_[i]);
-            }
-            else {
-                phi_E = phi_[idx_E] + 0.5 * minmod_E_vNeg(i) * (phi_[i] - phi_[idx_E]);
-            }
+                if(isWestBoundary){
+                    phi_W = secondaryWestBound ? point.secondBoundaryConds().value().bcVal : point.bcVal();
+                }
+                else if (u_local >= 0){
+                    phi_W = phi_[idx_W] + 0.5 * minmod_W_vPos(i) * (phi_[i] - phi_[idx_W]);
+                }
+                else {
+                    phi_W = phi_[i] + 0.5 * minmod_W_vNeg(i) * (phi_[idx_W] - phi_[i]);
+                }
 
-            //std::cout << "ForwardEuler: Fluxes and Update Time: " << duration.count() << "ns" << std::endl;
+                if(isEastBoundary){
+                    phi_E = secondaryEastBound ? point.secondBoundaryConds().value().bcVal : point.bcVal();
+                }
+                else if (u_local >= 0){
+                    phi_E = phi_[i] + 0.5 * minmod_E_vPos(i) * (phi_[idx_E] - phi_[i]);
+                }
+                else {
+                    phi_E = phi_[idx_E] + 0.5 * minmod_E_vNeg(i) * (phi_[i] - phi_[idx_E]);
+                }
 
-            //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
-            soln[i] = /*(!operatorSplit) * (Dh_ * dt_ * invdx_ * (dphi_dx_E - dphi_dx_W) + Dv_ * dt_ * invdy_ * (dphi_dy_N - dphi_dy_S))\*/
-                     dt_ * invdx_ * (u_local * phi_W - u_local * phi_E) + dt_ * invdy_ * (v_local * phi_S - v_local * phi_N)\
-                    + source_[i] * dt_ + phi_[i];
-            // stop = std::chrono::high_resolution_clock::now();
-            // duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
-            // avgFluxCalcTime += duration.count();
+                //std::cout << "ForwardEuler: Fluxes and Update Time: " << duration.count() << "ns" << std::endl;
+
+                //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
+                soln[i] = /*(!operatorSplit) * (Dh_ * dt_ * invdx_ * (dphi_dx_E - dphi_dx_W) + Dv_ * dt_ * invdy_ * (dphi_dy_N - dphi_dy_S))\*/
+                        dt_ * invdx_ * (u_local * phi_W - u_local * phi_E) + dt_ * invdy_ * (v_local * phi_S - v_local * phi_N)\
+                        + source_[i] * dt_ + phi_[i];
+                // stop = std::chrono::high_resolution_clock::now();
+                // duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
+                // avgFluxCalcTime += duration.count();
+            });
         }
         return soln;
     }
