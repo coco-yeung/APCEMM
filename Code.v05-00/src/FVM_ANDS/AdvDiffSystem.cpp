@@ -203,8 +203,8 @@ namespace FVM_ANDS{
         auto start = std::chrono::high_resolution_clock::now();
         for(int i = 0; i < nTotalPoints_; i++){
             bool isGhost = std::visit([](const auto& p) { return p.isGhost(); }, points_[i]);
-            if(isGhost()){
-                visitPoint(currIdx, [&](auto& point) {
+            if(isGhost){
+                visitPoint(i, [&](auto& point) {
                     switch(point.bcType()){
                         case BoundaryConditionFlag::DIRICHLET_GHOSTPOINT:{
                             // (phi_int + phi_ghost) / 2 = phi_boundary
@@ -262,7 +262,7 @@ namespace FVM_ANDS{
         //Therefore, that term goes to the RHS and the contribution of that face to the coeffs goes to 0.
 
         bool isNorthBoundary = 0, isWestBoundary = 0, isEastBoundary = 0, isSouthBoundary = 0;
-        visitPoint(currIdx, [&](auto& point) {
+        visitPoint(i, [&](auto& point) {
             if(point.bcType() != BoundaryConditionFlag::INTERIOR){
             isNorthBoundary = point.bcDirection() == FaceDirection::NORTH;
             isSouthBoundary = point.bcDirection() == FaceDirection::SOUTH;
@@ -321,12 +321,12 @@ namespace FVM_ANDS{
 
     const Eigen::VectorXd& AdvDiffSystem::calcRHS(){
         for(int i = 0; i < nTotalPoints_; i++){
-            visitPoint(currIdx, [&](auto& point) {
+            visitPoint(i, [&](auto& point) {
                     bool isGhost = point.isGhost();
                     auto bcTypeVal = point.bcType();
                     auto bcValVal = point.bcVal();
             
-                if(isGhost()){
+                if(isGhost){
                     switch(bcTypeVal){
                         case BoundaryConditionFlag::DIRICHLET_GHOSTPOINT:{
                             // Equation: (phi_int + phi_ghost) / 2 = phi_boundary
@@ -343,7 +343,7 @@ namespace FVM_ANDS{
                             throw std::runtime_error("Ghost point doesn't have a bcType associated with being a ghost point!");
                         }                
                     }
-                    continue;
+                    return;
                 }
 
                 switch(bcTypeVal){
@@ -393,8 +393,8 @@ namespace FVM_ANDS{
                         throw std::runtime_error("Interior boundary point has invalid bcType");
                     }                
                 }
-                continue;
             });
+            continue;
         }
 
         return rhs_;
@@ -473,7 +473,7 @@ namespace FVM_ANDS{
             int bPointID_left = twoDIdx_to_vecIdx(0, j, nx_, ny_, format_);
             switch(bcType_left_){
                 case BoundaryConditionFlag::DIRICHLET_INT_BPOINT: {
-                    visitPoint(bPointID_bot, [&](auto& point) {
+                    visitPoint(bcType_left_, [&](auto& point) {
                         int ghostPointID = point.corrPoint();
                         phi_[ghostPointID] = 2 * point.bcVal() - phi_[bPointID_left];
                     });
@@ -514,6 +514,7 @@ namespace FVM_ANDS{
         int currIdx = nInteriorPoints_;
         //top
         for(int i = 0; i < nx_; i++){
+            int corrPointID;
             visitPoint(currIdx, [&](auto& point) {
                 corrPointID = point.corrPoint();
                 point.setBCType(bcType_top_);
@@ -527,6 +528,7 @@ namespace FVM_ANDS{
         }
         //left
         for(int i = 0; i < ny_; i++){
+            int corrPointID;
             visitPoint(currIdx, [&](auto& point) {
                 corrPointID = point.corrPoint();
             });
@@ -554,6 +556,7 @@ namespace FVM_ANDS{
         }
         //right
         for(int i = 0; i < ny_; i++){
+            int corrPointID;
             visitPoint(currIdx, [&](auto& point) {
                 corrPointID = point.corrPoint();
             });
@@ -580,6 +583,7 @@ namespace FVM_ANDS{
         }
         //bot
         for(int i = 0; i < nx_; i++){
+            int corrPointID;
             visitPoint(currIdx, [&](auto& point) {
                 corrPointID = point.corrPoint();
                 point.setBCType(bcType_bot_);
