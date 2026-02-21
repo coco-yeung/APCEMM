@@ -553,7 +553,7 @@ namespace FVM_ANDS{
         }
         //bot
         for(int i = 0; i < nx_; i++){
-            int corrPointID = corrCache_[currIdx];
+            int ccorrPointID = points_[currIdx]->corrPoint();
             visitPoint(currIdx, [&](auto& point) {
                 point.setBCType(bcType_bot_);
                 point.setBCVal(bcVals_bot_[i]);

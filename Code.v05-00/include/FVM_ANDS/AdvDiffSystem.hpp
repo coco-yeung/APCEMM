@@ -4,6 +4,7 @@
 #include <Eigen/Sparse>
 #include "FVM_ANDS/BoundaryCondition.hpp"
 #include "FVM_ANDS_HelperFunctions.hpp"
+#include <variant>
 #include <memory>
 
 namespace FVM_ANDS{
