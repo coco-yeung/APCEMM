@@ -35,6 +35,7 @@ namespace FVM_ANDS{
             const Eigen::VectorXd& calcRHS();
             void applyBoundaryCondition();
             void updateBoundaryCondition(const BoundaryConditions& bc);
+            std::vector<PointCache> buildPointCache();
             Eigen::VectorXd forwardEulerAdvection(bool operatorSplit = false, bool parallelAdvection = false) const noexcept;
             // Breakup the implementation of sor_solve to allow for easy testing by inputing an arbitrary linear system to solve:
             // Implementation is moved outside of the class, and make class method to be used in code
@@ -135,6 +136,14 @@ namespace FVM_ANDS{
             
 
         private:
+            struct PointCache {
+                bool isNorth, isSouth, isEast, isWest;
+                bool secondaryWest, secondaryEast;
+                bool isBoundary;
+                int idx_N, idx_S, idx_E, idx_W;
+                double bcVal;
+                double secondaryBcVal;
+            };
 
             vecFormat format_;
             Eigen::VectorXd u_vec_;
@@ -171,20 +180,12 @@ namespace FVM_ANDS{
             Eigen::VectorXd phi_;
             Eigen::VectorXd source_;
             Eigen::VectorXd deferredCorr_;
+            std::vector<PointCache> pointCache_;
 
             void initVelocVecs();
             void buildPointList();
             void buildAdvectionCoeffs(int i, double& coeff_C, double& coeff_N, double& coeff_S, double& coeff_E, double& coeff_W);
             void updateGhostNodes();
-
-            struct PointCache {
-                bool isNorth, isSouth, isEast, isWest;
-                bool secondaryWest, secondaryEast;
-                bool isBoundary;
-                int idx_N, idx_S, idx_E, idx_W;
-                double bcVal;
-                double secondaryBcVal;
-            };
 
             inline bool isValidPointID(int idx) const {
                 return (idx >= 0 && idx < phi_.rows());
