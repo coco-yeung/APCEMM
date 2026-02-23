@@ -85,8 +85,8 @@ namespace FVM_ANDS{
         advDiffSys_.updateTimestep(dt_adv);
         for(int i = 0; i < n_timesteps_advection_half; i++){
             advDiffSys_.updatePhi(advDiffSys_.forwardEulerAdvection(operatorSplit, parallelAdvection));
-            advDiffSys_.applyBoundaryCondition();
         }
+        advDiffSys_.applyBoundaryCondition();
 
         #ifdef ENABLE_TIMING
         auto stop = std::chrono::high_resolution_clock::now();
@@ -154,8 +154,8 @@ namespace FVM_ANDS{
             //     phi_.resize(nx_ * ny_ + 2*nx_ + 2*ny_);
             //     phi_(Eigen::seq(0, nx_ * ny_ - 1)) = phi_new(Eigen::seq(0, nx_ * ny_ - 1));
             // }
-            advDiffSys_.applyBoundaryCondition();
         }
+        advDiffSys_.applyBoundaryCondition();
 
         advDiffSys_.updateTimestep(dt_max);
 
