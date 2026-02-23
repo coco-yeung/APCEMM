@@ -149,6 +149,11 @@ namespace FVM_ANDS{
         advDiffSys_.updateTimestep(dt_adv);
         for(int i = 0; i < n_timesteps_advection_half; i++){
             advDiffSys_.updatePhi(advDiffSys_.forwardEulerAdvection(operatorSplit));
+            //: inline void updatePhi(const Eigen::VectorXd& phi_new){ 
+                //Need to resize to account for grid changing in size.
+            //     phi_.resize(nx_ * ny_ + 2*nx_ + 2*ny_);
+            //     phi_(Eigen::seq(0, nx_ * ny_ - 1)) = phi_new(Eigen::seq(0, nx_ * ny_ - 1));
+            // }
             advDiffSys_.applyBoundaryCondition();
         }
 
@@ -181,6 +186,7 @@ namespace FVM_ANDS{
     }
 
     void FVM_Solver::advectionHalfTimestepSolve(Vector_2D& vec, const BoundaryConditions& bc, double courant_max){
+        //: don't think this is even used anymore 
         Eigen::VectorXd vec_Eigen = std2dVec_to_eigenVec(vec);
         advDiffSys_.updatePhi(vec_Eigen);
         advDiffSys_.updateBoundaryCondition(bc);
