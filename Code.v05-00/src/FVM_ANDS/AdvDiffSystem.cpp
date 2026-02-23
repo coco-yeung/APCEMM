@@ -81,6 +81,8 @@ namespace FVM_ANDS{
 
         start = std::chrono::high_resolution_clock::now();
         #endif
+
+        pointCache_ = buildPointCache();
     }
 
     void AdvDiffSystem::initVelocVecs(){
@@ -390,6 +392,11 @@ namespace FVM_ANDS{
         for(int i = 0; i < nx_; i++){
             //top
             int bPointID_top = twoDIdx_to_vecIdx(i, ny_ - 1, nx_, ny_, format_);
+            //: int twoDIdx_to_vecIdx(int idx_x, int idx_y, int nx, int ny, vecFormat format){
+            //     return (format == vecFormat::ROWMAJOR) ?
+            //             idx_y * nx + idx_x :
+            //             idx_x * ny + idx_y;
+            // }
             switch(bcType_top_){
                 case BoundaryConditionFlag::DIRICHLET_INT_BPOINT: {
                     int ghostPointID = points_[bPointID_top]->corrPoint();
@@ -541,10 +548,10 @@ namespace FVM_ANDS{
         applyBoundaryCondition(); //need this to calculate minmod function at some timestep.
     }
 
-    Eigen::VectorXd AdvDiffSystem::forwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
-        Eigen::VectorXd soln(nTotalPoints_);
-        // double avgBackgroundCalcTime = 0;
-        //Explicit Time-Stepping
+    std::vector<PointCache> buildPointCache() {
+        std::vector<PointCache> cache;
+        cache.reserve(nInteriorPoints_);
+
         #pragma omp parallel for    \
         if      ( parallelAdvection ) \
         default ( shared          ) \
@@ -557,6 +564,7 @@ namespace FVM_ANDS{
             int idx_W = i - ny_;
             int idx_N = i + 1;
             int idx_S = i - 1;
+            double bcVal = 0.0, secondaryBcVal = 0.0;
 
             //commenting out this results in ~30% speedup
             //The calls involving the optional are maybe 1/3 of the cost. Maybe something to look at later.
@@ -578,83 +586,79 @@ namespace FVM_ANDS{
                 idx_S = isSouthBoundary? point->corrPoint() : idx_S;
                 idx_E = isEastBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_E;
                 idx_W = isWestBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_W;
-            }
-            //When you declare these vars (inside or outside loop) has 0 impact)
-            //takes ~ 6 out of 18 ns on background var calcs
 
-            //these cost almost nothing to compute but commenting out anyway for maximum performance
-            // double dphi_dx_E = (phi_[idx_E] - phi_[i]) * invdx_;
-            // double dphi_dx_W = (phi_[i] - phi_[idx_W]) * invdx_;
-            // double dphi_dy_N = (phi_[idx_N] - phi_[i]) * invdy_;
-            // double dphi_dy_S = (phi_[i] - phi_[idx_S]) * invdy_;
-            
-            //ignoreing distinction of faces saves a good amt of time
-            // double u_W = isWestBoundary? u_vec_[i] : 0.5 * (u_vec_[i] + u_vec_[idx_W]);
-            // double u_E = isEastBoundary? u_vec_[i] : 0.5 * (u_vec_[i] + u_vec_[idx_E]);
-            // double v_N = isNorthBoundary? v_vec_[i] : 0.5 * (v_vec_[i] + v_vec_[idx_N]);
-            // double v_S = isSouthBoundary? v_vec_[i] : 0.5 * (v_vec_[i] + v_vec_[idx_S]);
+                bcVal = point->bcVal();
+                secondaryBcVal = secondaryWestBound || secondaryEastBound ? point->secondBoundaryConds()->bcVal : 0.0;
+            }
+
+            cache.push_back({
+                isNorthBoundary, isSouthBoundary, isEastBoundary, isWestBoundary,
+                secondaryWestBound, secondaryEastBound,
+                idx_N, idx_S, idx_E, idx_W,
+                bcVal, secondaryBcVal
+            });
+        }
+    }
+
+    Eigen::VectorXd AdvDiffSystem::forwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
+        Eigen::VectorXd soln(nTotalPoints_);
+        // double avgBackgroundCalcTime = 0;
+        //Explicit Time-Stepping
+        #pragma omp parallel for    \
+        if      ( parallelAdvection ) \
+        default ( shared          ) \
+        schedule( static, 100      )
+        for(int i = 0; i < nInteriorPoints_; i++){
+            const PointCache& pc = pointCache_[i];
+
             double u_local = u_vec_[i];
             double v_local = v_vec_[i];
 
-            // auto stop = std::chrono::high_resolution_clock::now();
-            // auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
-            // avgBackgroundCalcTime += duration.count();
-            //std::cout << "ForwardEuler: Background Variable Calc Time: " << duration.count() << "ns" << std::endl;
-            // start = std::chrono::high_resolution_clock::now();
             double phi_N, phi_S, phi_W, phi_E;
 
-            //Unraveling any of these if's into single liners hurts performance
-            //Killing the branching completely into 1 statement (not possible) only results in ~10% speedup (not worth it)
-            //Using only first order upwind can result in a ~40% speedup of the total advection calc.
-            //So... there is significantly more cost from actually doing the calculation than from branching.
-            if(isNorthBoundary){
-                phi_N = points_[i]->bcVal();
+            if(pc.isNorth){
+                phi_N = pc.bcVal;
             }
             else if (v_local >= 0){
-                phi_N = phi_[i] + 0.5 * minmod_N_vPos(i) * (phi_[idx_N] - phi_[i]);
+                phi_N = phi_[i] + 0.5 * minmod_N_vPos(i) * (phi_[pc.idx_N] - phi_[i]);
             }
             else {
-                phi_N = phi_[idx_N] + 0.5 * minmod_N_vNeg(i) * (phi_[i] - phi_[idx_N]);
+                phi_N = phi_[pc.idx_N] + 0.5 * minmod_N_vNeg(i) * (phi_[i] - phi_[pc.idx_N]);
             }
-            if(isSouthBoundary){
-                phi_S = points_[i]->bcVal();
+            if(pc.isSouth){
+                phi_S = pc.bcVal;
             }
             else if (v_local >= 0){
-                phi_S = phi_[idx_S] +  0.5 * minmod_S_vPos(i) * (phi_[i] - phi_[idx_S]);
+                phi_S = phi_[pc.idx_S] +  0.5 * minmod_S_vPos(i) * (phi_[i] - phi_[pc.idx_S]);
             }
             else {
-                phi_S = phi_[i] +  0.5 * minmod_S_vNeg(i) * (phi_[idx_S] - phi_[i]);
+                phi_S = phi_[i] +  0.5 * minmod_S_vNeg(i) * (phi_[pc.idx_S] - phi_[i]);
             }
 
-            if(isWestBoundary){
-                phi_W = secondaryWestBound ? points_[i]->secondBoundaryConds().value().bcVal : points_[i]->bcVal();
+            if(pc.isWest){
+                phi_W = pc.secondaryWest ? pc.secondaryBcVal : pc.bcVal;
             }
             else if (u_local >= 0){
-                phi_W = phi_[idx_W] + 0.5 * minmod_W_vPos(i) * (phi_[i] - phi_[idx_W]);
+                phi_W = phi_[pc.idx_W] + 0.5 * minmod_W_vPos(i) * (phi_[i] - phi_[pc.idx_W]);
             }
             else {
-                phi_W = phi_[i] + 0.5 * minmod_W_vNeg(i) * (phi_[idx_W] - phi_[i]);
+                phi_W = phi_[i] + 0.5 * minmod_W_vNeg(i) * (phi_[pc.idx_W] - phi_[i]);
             }
 
-            if(isEastBoundary){
-                phi_E = secondaryEastBound ? points_[i]->secondBoundaryConds().value().bcVal : points_[i]->bcVal();
+            if(pc.isEast){
+                phi_E = pc.secondaryEast ? pc.secondaryBcVal : pc.bcVal;
             }
             else if (u_local >= 0){
-                phi_E = phi_[i] + 0.5 * minmod_E_vPos(i) * (phi_[idx_E] - phi_[i]);
+                phi_E = phi_[i] + 0.5 * minmod_E_vPos(i) * (phi_[pc.idx_E] - phi_[i]);
             }
             else {
-                phi_E = phi_[idx_E] + 0.5 * minmod_E_vNeg(i) * (phi_[i] - phi_[idx_E]);
+                phi_E = phi_[pc.idx_E] + 0.5 * minmod_E_vNeg(i) * (phi_[i] - phi_[pc.idx_E]);
             }
-
-            //std::cout << "ForwardEuler: Fluxes and Update Time: " << duration.count() << "ns" << std::endl;
 
             //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
             soln[i] = /*(!operatorSplit) * (Dh_ * dt_ * invdx_ * (dphi_dx_E - dphi_dx_W) + Dv_ * dt_ * invdy_ * (dphi_dy_N - dphi_dy_S))\*/
                      dt_ * invdx_ * (u_local * phi_W - u_local * phi_E) + dt_ * invdy_ * (v_local * phi_S - v_local * phi_N)\
                     + source_[i] * dt_ + phi_[i];
-            // stop = std::chrono::high_resolution_clock::now();
-            // duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
-            // avgFluxCalcTime += duration.count();
         }
         return soln;
     }
