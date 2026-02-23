@@ -177,6 +177,15 @@ namespace FVM_ANDS{
             void buildAdvectionCoeffs(int i, double& coeff_C, double& coeff_N, double& coeff_S, double& coeff_E, double& coeff_W);
             void updateGhostNodes();
 
+            struct PointCache {
+                bool isNorth, isSouth, isEast, isWest;
+                bool secondaryWest, secondaryEast;
+                bool isBoundary;
+                int idx_N, idx_S, idx_E, idx_W;
+                double bcVal;
+                double secondaryBcVal;
+            };
+
             inline bool isValidPointID(int idx) const {
                 return (idx >= 0 && idx < phi_.rows());
             }
