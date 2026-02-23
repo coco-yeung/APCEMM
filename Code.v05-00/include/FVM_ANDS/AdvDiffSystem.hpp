@@ -30,7 +30,6 @@ namespace FVM_ANDS{
     struct PointCache {
         bool isNorth, isSouth, isEast, isWest;
         bool secondaryWest, secondaryEast;
-        bool isBoundary;
         int idx_N, idx_S, idx_E, idx_W;
         double bcVal;
         double secondaryBcVal;
