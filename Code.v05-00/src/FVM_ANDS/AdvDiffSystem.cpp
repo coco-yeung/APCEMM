@@ -82,7 +82,7 @@ namespace FVM_ANDS{
         start = std::chrono::high_resolution_clock::now();
         #endif
 
-        pointCache_ = buildPointCache();
+        buildPointCache();
     }
 
     void AdvDiffSystem::initVelocVecs(){
@@ -548,14 +548,10 @@ namespace FVM_ANDS{
         applyBoundaryCondition(); //need this to calculate minmod function at some timestep.
     }
 
-    std::vector<PointCache> buildPointCache() {
-        std::vector<PointCache> cache;
-        cache.reserve(nInteriorPoints_);
-
-        #pragma omp parallel for    \
-        if      ( parallelAdvection ) \
-        default ( shared          ) \
-        schedule( static, 100      )
+    void AdvDiffSystem::buildPointCache() {
+        pointCache_.clear();
+        pointCache_.reserve(nInteriorPoints_);
+        
         for(int i = 0; i < nInteriorPoints_; i++){
             //When a boundary condition is in place, phi at the face can be directly calculated using the BC.
             //Therefore, that term goes to the RHS and the contribution of that face to the coeffs goes to 0.
@@ -591,7 +587,7 @@ namespace FVM_ANDS{
                 secondaryBcVal = secondaryWestBound || secondaryEastBound ? point->secondBoundaryConds()->bcVal : 0.0;
             }
 
-            cache.push_back({
+            pointCache_.push_back({
                 isNorthBoundary, isSouthBoundary, isEastBoundary, isWestBoundary,
                 secondaryWestBound, secondaryEastBound,
                 idx_N, idx_S, idx_E, idx_W,
