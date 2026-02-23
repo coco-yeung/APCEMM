@@ -27,6 +27,14 @@ namespace FVM_ANDS{
         double Dv;
         double dt;
     };
+    struct PointCache {
+        bool isNorth, isSouth, isEast, isWest;
+        bool secondaryWest, secondaryEast;
+        bool isBoundary;
+        int idx_N, idx_S, idx_E, idx_W;
+        double bcVal;
+        double secondaryBcVal;
+    };
     class AdvDiffSystem{
         public:
             AdvDiffSystem() = delete;
@@ -136,14 +144,6 @@ namespace FVM_ANDS{
             
 
         private:
-            struct PointCache {
-                bool isNorth, isSouth, isEast, isWest;
-                bool secondaryWest, secondaryEast;
-                bool isBoundary;
-                int idx_N, idx_S, idx_E, idx_W;
-                double bcVal;
-                double secondaryBcVal;
-            };
 
             vecFormat format_;
             Eigen::VectorXd u_vec_;
