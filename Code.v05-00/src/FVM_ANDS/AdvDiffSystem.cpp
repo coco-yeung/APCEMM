@@ -608,18 +608,18 @@ namespace FVM_ANDS{
 
     Eigen::VectorXd AdvDiffSystem::forwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
         Eigen::VectorXd soln(nTotalPoints_);
-        Eigen::VectorXd phi_P  = phi_(interiorSlice);
-        Eigen::VectorXd phi_N  = phi_(interiorSlice + 1);   // offset views
-        Eigen::VectorXd phi_S  = phi_(interiorSlice - 1);
-        Eigen::VectorXd phi_E  = phi_(interiorSlice + ny_);
-        Eigen::VectorXd phi_W  = phi_(interiorSlice - ny_);
-        Eigen::VectorXd phi_NN = phi_(interiorSlice + 2);
-        Eigen::VectorXd phi_SS = phi_(interiorSlice - 2);
-        Eigen::VectorXd phi_EE = phi_(interiorSlice + 2*ny_);
-        Eigen::VectorXd phi_WW = phi_(interiorSlice - 2*ny_);
+        Eigen::VectorXd phi_P  = phi_(interiorIndices_);
+        Eigen::VectorXd phi_N  = phi_(interiorIndices_ + 1);   // offset views
+        Eigen::VectorXd phi_S  = phi_(interiorIndices_ - 1);
+        Eigen::VectorXd phi_E  = phi_(interiorIndices_ + ny_);
+        Eigen::VectorXd phi_W  = phi_(interiorIndices_ - ny_);
+        Eigen::VectorXd phi_NN = phi_(interiorIndices_ + 2);
+        Eigen::VectorXd phi_SS = phi_(interiorIndices_ - 2);
+        Eigen::VectorXd phi_EE = phi_(interiorIndices_ + 2*ny_);
+        Eigen::VectorXd phi_WW = phi_(interiorIndices_ - 2*ny_);
 
-        Eigen::VectorXd u = u_vec_(interiorSlice);
-        Eigen::VectorXd v = v_vec_(interiorSlice);
+        Eigen::VectorXd u = u_vec_(interiorIndices_);
+        Eigen::VectorXd v = v_vec_(interiorIndices_);
 
         auto minmod = [](Eigen::VectorXd r) {
             return r.cwiseMax(0.0).cwiseMin(1.0);
@@ -662,10 +662,9 @@ namespace FVM_ANDS{
         Eigen::VectorXd phi_E_final = (u.array() >= 0).select(phi_E_vPos, phi_E_vNeg);
         Eigen::VectorXd phi_W_final = (u.array() >= 0).select(phi_W_vPos, phi_W_vNeg);
 
-        soln(interiorSlice) = dt_ * invdx_ * u.cwiseProduct(phi_W_final - phi_E_final)
+        soln(interiorIndices_) = dt_ * invdx_ * u.cwiseProduct(phi_W_final - phi_E_final)
                     + dt_ * invdy_ * v.cwiseProduct(phi_S_final - phi_N_final)
-                    + source_(interiorSlice) * dt_ + phi_P;
-        }
+                    + source_(interiorIndices_) * dt_ + phi_P;
 
         // double avgBackgroundCalcTime = 0;
         //Explicit Time-Stepping
