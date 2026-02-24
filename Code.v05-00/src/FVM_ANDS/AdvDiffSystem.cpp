@@ -568,7 +568,8 @@ namespace FVM_ANDS{
             //The calls involving the optional are maybe 1/3 of the cost. Maybe something to look at later.
             if(points_[i]->bcType() != BoundaryConditionFlag::INTERIOR
             || !isValidPointID(i+2) || !isValidPointID(i-2)
-            || !isValidPointID(i+2*ny_) || !isValidPointID(i-2*ny_)){
+            || !isValidPointID(i+2*ny_) || !isValidPointID(i-2*ny_)
+            || neighbor_point(FaceDirection::NORTH, i)){
                 Point* point = points_[i].get();
                 FaceDirection direction = point->bcDirection();
                 isNorthBoundary = direction == FaceDirection::NORTH;
@@ -607,63 +608,63 @@ namespace FVM_ANDS{
 
     Eigen::VectorXd AdvDiffSystem::forwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
         Eigen::VectorXd soln(nTotalPoints_);
+        Eigen::VectorXd phi_P  = phi_(interiorSlice);
+        Eigen::VectorXd phi_N  = phi_(interiorSlice + 1);   // offset views
+        Eigen::VectorXd phi_S  = phi_(interiorSlice - 1);
+        Eigen::VectorXd phi_E  = phi_(interiorSlice + ny_);
+        Eigen::VectorXd phi_W  = phi_(interiorSlice - ny_);
+        Eigen::VectorXd phi_NN = phi_(interiorSlice + 2);
+        Eigen::VectorXd phi_SS = phi_(interiorSlice - 2);
+        Eigen::VectorXd phi_EE = phi_(interiorSlice + 2*ny_);
+        Eigen::VectorXd phi_WW = phi_(interiorSlice - 2*ny_);
 
-        // double avgBackgroundCalcTime = 0;
-        //Explicit Time-Stepping
-        #pragma omp parallel for    \
-        if      ( parallelAdvection ) \
-        default ( shared          ) \
-        schedule( static, 100      )
-        for(int i : interiorIndices_){
-            double phi_P  = phi_[i];
-            double phi_N  = phi_[i + 1];
-            double phi_S  = phi_[i - 1];
-            double phi_E  = phi_[i + ny_];
-            double phi_W  = phi_[i - ny_];
-            double phi_NN = phi_[i + 2];
-            double phi_SS = phi_[i - 2];
-            double phi_EE = phi_[i + 2*ny_];
-            double phi_WW = phi_[i - 2*ny_];
+        Eigen::VectorXd u = u_vec_(interiorSlice);
+        Eigen::VectorXd v = v_vec_(interiorSlice);
 
-            double u_local = u_vec_[i];
-            double v_local = v_vec_[i];
-            double phi_N_new, phi_S_new, phi_W_new, phi_E_new;
+        auto minmod = [](Eigen::VectorXd r) {
+            return r.cwiseMax(0.0).cwiseMin(1.0);
+        };
 
-            if(v_local >= 0){
-                double r_N = (phi_N - phi_P == 0) ? 0 : (phi_P - phi_S) / (phi_N - phi_P);
-                double lim_N = std::max(0.0, std::min(r_N, 1.0));
-                phi_N_new = phi_P + 0.5 * lim_N * (phi_N - phi_P);
-                double r_S = (phi_P - phi_S == 0) ? 0 : (phi_S - phi_SS) / (phi_P - phi_S);
-                double lim_S = std::max(0.0, std::min(r_S, 1.0));
-                phi_S_new = phi_S + 0.5 * lim_S * (phi_P - phi_S);
-            } else {
-                double r_N = (phi_N - phi_P == 0) ? 0 : (phi_NN - phi_N) / (phi_N - phi_P);
-                double lim_N = std::max(0.0, std::min(r_N, 1.0));
-                phi_N_new = phi_N + 0.5 * lim_N * (phi_P - phi_N);
-                double r_S = (phi_P - phi_S == 0 || neighbor_point(FaceDirection::NORTH, i)) ? 0 : (phi_N - phi_P) / (phi_P - phi_S);
-                double lim_S = std::max(0.0, std::min(r_S, 1.0));
-                phi_S_new = phi_P + 0.5 * lim_S * (phi_S - phi_P);
-            }
+        Eigen::VectorXd dN = phi_N - phi_P;
+        Eigen::VectorXd dS = phi_P - phi_S;
 
-            if(u_local >= 0){
-                double r_E = (phi_E - phi_P == 0) ? 0 : (phi_P - phi_W) / (phi_E - phi_P);
-                double lim_E = std::max(0.0, std::min(r_E, 1.0));
-                phi_E_new = phi_P + 0.5 * lim_E * (phi_E - phi_P);
-                double r_W = (phi_P - phi_W == 0) ? 0 : (phi_W - phi_WW) / (phi_P - phi_W);
-                double lim_W = std::max(0.0, std::min(r_W, 1.0));
-                phi_W_new = phi_W + 0.5 * lim_W * (phi_P - phi_W);
-            } else {
-                double r_E = (phi_E - phi_P == 0) ? 0 : (phi_EE - phi_E) / (phi_E - phi_P);
-                double lim_E = std::max(0.0, std::min(r_E, 1.0));
-                phi_E_new = phi_E + 0.5 * lim_E * (phi_P - phi_E);
-                double r_W = (phi_P - phi_W == 0) ? 0 : (phi_E - phi_P) / (phi_P - phi_W);
-                double lim_W = std::max(0.0, std::min(r_W, 1.0));
-                phi_W_new = phi_P + 0.5 * lim_W * (phi_W - phi_P);
-            }
+        // N
+        Eigen::VectorXd r_N_pos = (dN.array() == 0).select(0, (dS).cwiseQuotient(dN));
+        Eigen::VectorXd phi_N_vPos = phi_P + 0.5 * minmod(r_N_pos).cwiseProduct(dN);
+        Eigen::VectorXd r_N_neg = (dN.array() == 0).select(0, (phi_NN - phi_N).cwiseQuotient(dN));
+        Eigen::VectorXd phi_N_vNeg = phi_N - 0.5 * minmod(r_N_neg).cwiseProduct(dN);
 
-            soln[i] = dt_ * invdx_ * (u_local * phi_W_new - u_local * phi_E_new)
-                    + dt_ * invdy_ * (v_local * phi_S_new - v_local * phi_N_new)
-                    + source_[i] * dt_ + phi_P;
+        // S        
+        Eigen::VectorXd r_S_pos = (dS.array() == 0).select(0, (phi_S - phi_SS).cwiseQuotient(dS));
+        Eigen::VectorXd phi_S_vPos = phi_S + 0.5 * minmod(r_S_pos).cwiseProduct(dS);
+        Eigen::VectorXd r_S_neg = (dS.array() == 0).select(0, (dN).cwiseQuotient(dS));
+        Eigen::VectorXd phi_S_vNeg = phi_P - 0.5 * minmod(r_S_neg).cwiseProduct(dS);
+
+        // Select based on sign of v
+        Eigen::VectorXd phi_N_final = (v.array() >= 0).select(phi_N_vPos, phi_N_vNeg);
+        Eigen::VectorXd phi_S_final = (v.array() >= 0).select(phi_S_vPos, phi_S_vNeg);
+
+        Eigen::VectorXd dE = phi_E - phi_P;
+        Eigen::VectorXd dW = phi_P - phi_W;
+
+        // E
+        Eigen::VectorXd r_E_pos = (dE.array() == 0).select(0, (dW).cwiseQuotient(dE));
+        Eigen::VectorXd phi_E_vPos = phi_P + 0.5 * minmod(r_E_pos).cwiseProduct(dE);
+        Eigen::VectorXd r_E_neg = (dE.array() == 0).select(0, (phi_EE - phi_E).cwiseQuotient(dE));
+        Eigen::VectorXd phi_E_vNeg = phi_E - 0.5 * minmod(r_E_neg).cwiseProduct(dE);
+
+        // S        
+        Eigen::VectorXd r_W_pos = (dW.array() == 0).select(0, (phi_W - phi_WW).cwiseQuotient(dW));
+        Eigen::VectorXd phi_W_vPos = phi_W + 0.5 * minmod(r_W_pos).cwiseProduct(dW);
+        Eigen::VectorXd r_W_neg = (dW.array() == 0).select(0, (dE).cwiseQuotient(dW));
+        Eigen::VectorXd phi_W_vNeg = phi_P - 0.5 * minmod(r_W_neg).cwiseProduct(dW);
+
+        Eigen::VectorXd phi_E_final = (u.array() >= 0).select(phi_E_vPos, phi_E_vNeg);
+        Eigen::VectorXd phi_W_final = (u.array() >= 0).select(phi_W_vPos, phi_W_vNeg);
+
+        soln(interiorSlice) = dt_ * invdx_ * u.cwiseProduct(phi_W_final - phi_E_final)
+                    + dt_ * invdy_ * v.cwiseProduct(phi_S_final - phi_N_final)
+                    + source_(interiorSlice) * dt_ + phi_P;
         }
 
         // double avgBackgroundCalcTime = 0;
