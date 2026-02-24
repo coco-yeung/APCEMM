@@ -557,7 +557,7 @@ namespace FVM_ANDS{
         for(int i = 0; i < nInteriorPoints_; i++){
             //When a boundary condition is in place, phi at the face can be directly calculated using the BC.
             //Therefore, that term goes to the RHS and the contribution of that face to the coeffs goes to 0.
-            bool isNorthBoundary = 0, isWestBoundary = 0, isEastBoundary = 0, isSouthBoundary = 0；
+            bool isNorthBoundary = 0, isWestBoundary = 0, isEastBoundary = 0, isSouthBoundary = 0, secondaryEastBound = 0, secondaryWestBound = 0;
             int idx_E = i + ny_;
             int idx_W = i - ny_;
             int idx_N = i + 1;
@@ -575,8 +575,8 @@ namespace FVM_ANDS{
                 isSouthBoundary = direction == FaceDirection::SOUTH;
 
                 //Corner cases...
-                bool secondaryWestBound = (point->secondBoundaryConds() && point->secondBoundaryConds()->direction == FaceDirection::WEST);
-                bool secondaryEastBound = (point->secondBoundaryConds() && point->secondBoundaryConds()->direction == FaceDirection::EAST);
+                secondaryWestBound = (point->secondBoundaryConds() && point->secondBoundaryConds()->direction == FaceDirection::WEST);
+                secondaryEastBound = (point->secondBoundaryConds() && point->secondBoundaryConds()->direction == FaceDirection::EAST);
 
                 isWestBoundary = (direction == FaceDirection::WEST || secondaryWestBound);
                 isEastBoundary = (direction == FaceDirection::EAST || secondaryEastBound);
