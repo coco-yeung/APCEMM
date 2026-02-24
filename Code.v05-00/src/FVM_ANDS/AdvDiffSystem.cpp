@@ -549,6 +549,8 @@ namespace FVM_ANDS{
     }
 
     void AdvDiffSystem::buildPointCache() {
+        interiorIndices_.clear();
+        boundaryIndices_.clear();
         pointCache_.clear();
         pointCache_.reserve(nInteriorPoints_);
         
@@ -564,7 +566,9 @@ namespace FVM_ANDS{
 
             //commenting out this results in ~30% speedup
             //The calls involving the optional are maybe 1/3 of the cost. Maybe something to look at later.
-            if(points_[i]->bcType() != BoundaryConditionFlag::INTERIOR){
+            if(points_[i]->bcType() != BoundaryConditionFlag::INTERIOR
+            || !isValidPointID(i+2) || !isValidPointID(i-2)
+            || !isValidPointID(i+2*ny_) || !isValidPointID(i-2*ny_)){
                 Point* point = points_[i].get();
                 FaceDirection direction = point->bcDirection();
                 isNorthBoundary = direction == FaceDirection::NORTH;
@@ -585,26 +589,90 @@ namespace FVM_ANDS{
 
                 bcVal = point->bcVal();
                 secondaryBcVal = secondaryWestBound || secondaryEastBound ? point->secondBoundaryConds()->bcVal : 0.0;
-            }
 
-            pointCache_.push_back({
-                isNorthBoundary, isSouthBoundary, isEastBoundary, isWestBoundary,
-                secondaryWestBound, secondaryEastBound,
-                idx_N, idx_S, idx_E, idx_W,
-                bcVal, secondaryBcVal
-            });
+                pointCache_.push_back({
+                    isNorthBoundary, isSouthBoundary, isEastBoundary, isWestBoundary,
+                    secondaryWestBound, secondaryEastBound,
+                    idx_N, idx_S, idx_E, idx_W,
+                    bcVal, secondaryBcVal
+                });
+
+                boundaryIndices_.push_back(i);
+            }
+            else {
+                interiorIndices_.push_back(i);
+            }
         }
     }
 
     Eigen::VectorXd AdvDiffSystem::forwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
         Eigen::VectorXd soln(nTotalPoints_);
+
         // double avgBackgroundCalcTime = 0;
         //Explicit Time-Stepping
         #pragma omp parallel for    \
         if      ( parallelAdvection ) \
         default ( shared          ) \
         schedule( static, 100      )
-        for(int i = 0; i < nInteriorPoints_; i++){
+        for(int i : interiorIndices_){
+            double phi_P  = phi_[i];
+            double phi_N  = phi_[i + 1];
+            double phi_S  = phi_[i - 1];
+            double phi_E  = phi_[i + ny_];
+            double phi_W  = phi_[i - ny_];
+            double phi_NN = phi_[i + 2];
+            double phi_SS = phi_[i - 2];
+            double phi_EE = phi_[i + 2*ny_];
+            double phi_WW = phi_[i - 2*ny_];
+
+            double u_local = u_vec_[i];
+            double v_local = v_vec_[i];
+            double phi_N_new, phi_S_new, phi_W_new, phi_E_new;
+
+            if(v_local >= 0){
+                double r_N = (phi_N - phi_P == 0) ? 0 : (phi_P - phi_S) / (phi_N - phi_P);
+                double lim_N = std::max(0.0, std::min(r_N, 1.0));
+                phi_N_new = phi_P + 0.5 * lim_N * (phi_N - phi_P);
+                double r_S = (phi_P - phi_S == 0) ? 0 : (phi_S - phi_SS) / (phi_P - phi_S);
+                double lim_S = std::max(0.0, std::min(r_S, 1.0));
+                phi_S_new = phi_S + 0.5 * lim_S * (phi_P - phi_S);
+            } else {
+                double r_N = (phi_N - phi_P == 0) ? 0 : (phi_NN - phi_N) / (phi_N - phi_P);
+                double lim_N = std::max(0.0, std::min(r_N, 1.0));
+                phi_N_new = phi_N + 0.5 * lim_N * (phi_P - phi_N);
+                double r_S = (phi_P - phi_S == 0) ? 0 : (phi_N - phi_P) / (phi_P - phi_S);
+                double lim_S = std::max(0.0, std::min(r_S, 1.0));
+                phi_S_new = phi_P + 0.5 * lim_S * (phi_S - phi_P);
+            }
+
+            if(u_local >= 0){
+                double r_E = (phi_E - phi_P == 0) ? 0 : (phi_P - phi_W) / (phi_E - phi_P);
+                double lim_E = std::max(0.0, std::min(r_E, 1.0));
+                phi_E_new = phi_P + 0.5 * lim_E * (phi_E - phi_P);
+                double r_W = (phi_P - phi_W == 0) ? 0 : (phi_W - phi_WW) / (phi_P - phi_W);
+                double lim_W = std::max(0.0, std::min(r_W, 1.0));
+                phi_W_new = phi_W + 0.5 * lim_W * (phi_P - phi_W);
+            } else {
+                double r_E = (phi_E - phi_P == 0) ? 0 : (phi_EE - phi_E) / (phi_E - phi_P);
+                double lim_E = std::max(0.0, std::min(r_E, 1.0));
+                phi_E_new = phi_E + 0.5 * lim_E * (phi_P - phi_E);
+                double r_W = (phi_P - phi_W == 0) ? 0 : (phi_E - phi_P) / (phi_P - phi_W);
+                double lim_W = std::max(0.0, std::min(r_W, 1.0));
+                phi_W_new = phi_P + 0.5 * lim_W * (phi_W - phi_P);
+            }
+
+            soln[i] = dt_ * invdx_ * (u_local * phi_W_new - u_local * phi_E_new)
+                    + dt_ * invdy_ * (v_local * phi_S_new - v_local * phi_N_new)
+                    + source_[i] * dt_ + phi_P;
+        }
+
+        // double avgBackgroundCalcTime = 0;
+        //Explicit Time-Stepping
+        #pragma omp parallel for    \
+        if      ( parallelAdvection ) \
+        default ( shared          ) \
+        schedule( static, 100      )
+        for(int i : boundaryIndices_){
             const PointCache& pc = pointCache_[i];
 
             double u_local = u_vec_[i];
