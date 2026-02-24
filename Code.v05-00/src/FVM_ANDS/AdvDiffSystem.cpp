@@ -552,12 +552,12 @@ namespace FVM_ANDS{
         interiorIndices_.clear();
         boundaryIndices_.clear();
         pointCache_.clear();
-        pointCache_.reserve(nInteriorPoints_);
+        pointCache_.resize(nInteriorPoints_);
         
         for(int i = 0; i < nInteriorPoints_; i++){
             //When a boundary condition is in place, phi at the face can be directly calculated using the BC.
             //Therefore, that term goes to the RHS and the contribution of that face to the coeffs goes to 0.
-            bool isNorthBoundary = 0, isWestBoundary = 0, isEastBoundary = 0, isSouthBoundary = 0, secondaryWestBound = 0, secondaryEastBound = 0;
+            bool isNorthBoundary = 0, isWestBoundary = 0, isEastBoundary = 0, isSouthBoundary = 0；
             int idx_E = i + ny_;
             int idx_W = i - ny_;
             int idx_N = i + 1;
@@ -590,7 +590,7 @@ namespace FVM_ANDS{
                 bcVal = point->bcVal();
                 secondaryBcVal = secondaryWestBound || secondaryEastBound ? point->secondBoundaryConds()->bcVal : 0.0;
 
-                pointCache_.push_back({
+                pointCache_[i] = ({
                     isNorthBoundary, isSouthBoundary, isEastBoundary, isWestBoundary,
                     secondaryWestBound, secondaryEastBound,
                     idx_N, idx_S, idx_E, idx_W,
