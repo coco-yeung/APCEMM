@@ -640,7 +640,7 @@ namespace FVM_ANDS{
                 double r_N = (phi_N - phi_P == 0) ? 0 : (phi_NN - phi_N) / (phi_N - phi_P);
                 double lim_N = std::max(0.0, std::min(r_N, 1.0));
                 phi_N_new = phi_N + 0.5 * lim_N * (phi_P - phi_N);
-                double r_S = (phi_P - phi_S == 0) ? 0 : (phi_N - phi_P) / (phi_P - phi_S);
+                double r_S = (phi_P - phi_S == 0 || neighbor_point(FaceDirection::NORTH, i)) ? 0 : (phi_N - phi_P) / (phi_P - phi_S);
                 double lim_S = std::max(0.0, std::min(r_S, 1.0));
                 phi_S_new = phi_P + 0.5 * lim_S * (phi_S - phi_P);
             }
