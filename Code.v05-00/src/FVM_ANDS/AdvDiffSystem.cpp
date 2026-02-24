@@ -590,12 +590,12 @@ namespace FVM_ANDS{
                 bcVal = point->bcVal();
                 secondaryBcVal = secondaryWestBound || secondaryEastBound ? point->secondBoundaryConds()->bcVal : 0.0;
 
-                pointCache_[i] = ({
+                pointCache_[i] = {
                     isNorthBoundary, isSouthBoundary, isEastBoundary, isWestBoundary,
                     secondaryWestBound, secondaryEastBound,
                     idx_N, idx_S, idx_E, idx_W,
                     bcVal, secondaryBcVal
-                });
+                };
 
                 boundaryIndices_.push_back(i);
             }
