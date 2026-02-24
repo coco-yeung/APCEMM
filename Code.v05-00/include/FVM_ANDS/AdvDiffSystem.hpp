@@ -180,6 +180,8 @@ namespace FVM_ANDS{
             Eigen::VectorXd source_;
             Eigen::VectorXd deferredCorr_;
             std::vector<PointCache> pointCache_;
+            std::vector<int> interiorIndices_;
+            std::vector<int> boundaryIndices_;
 
             void initVelocVecs();
             void buildPointList();
