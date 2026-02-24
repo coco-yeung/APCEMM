@@ -550,6 +550,15 @@ namespace FVM_ANDS{
 
     void AdvDiffSystem::buildPointCache() {
         interiorIndices_.clear();
+        interiorIndicesN_.clear();
+        interiorIndicesS_.clear();
+        interiorIndicesE_.clear();
+        interiorIndicesW_.clear();
+        interiorIndicesNN_.clear();
+        interiorIndicesSS_.clear();
+        interiorIndicesEE_.clear();
+        interiorIndicesWW_.clear();
+
         boundaryIndices_.clear();
         pointCache_.clear();
         pointCache_.resize(nInteriorPoints_);
@@ -569,7 +578,7 @@ namespace FVM_ANDS{
             if(points_[i]->bcType() != BoundaryConditionFlag::INTERIOR
             || !isValidPointID(i+2) || !isValidPointID(i-2)
             || !isValidPointID(i+2*ny_) || !isValidPointID(i-2*ny_)
-            || neighbor_point(FaceDirection::NORTH, i)){
+            || (neighbor_point(FaceDirection::NORTH, i)){
                 Point* point = points_[i].get();
                 FaceDirection direction = point->bcDirection();
                 isNorthBoundary = direction == FaceDirection::NORTH;
@@ -602,6 +611,14 @@ namespace FVM_ANDS{
             }
             else {
                 interiorIndices_.push_back(i);
+                interiorIndicesN_.push_back(i + 1);
+                interiorIndicesS_.push_back(i - 1);
+                interiorIndicesE_.push_back(i + ny_);
+                interiorIndicesW_.push_back(i - ny_);
+                interiorIndicesNN_.push_back(i + 2);
+                interiorIndicesSS_.push_back(i - 2);
+                interiorIndicesEE_.push_back(i + 2*ny_);
+                interiorIndicesWW_.push_back(i - 2*ny_);
             }
         }
     }
@@ -609,14 +626,14 @@ namespace FVM_ANDS{
     Eigen::VectorXd AdvDiffSystem::forwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
         Eigen::VectorXd soln(nTotalPoints_);
         Eigen::VectorXd phi_P  = phi_(interiorIndices_);
-        Eigen::VectorXd phi_N  = phi_(interiorIndices_ + 1);   // offset views
-        Eigen::VectorXd phi_S  = phi_(interiorIndices_ - 1);
-        Eigen::VectorXd phi_E  = phi_(interiorIndices_ + ny_);
-        Eigen::VectorXd phi_W  = phi_(interiorIndices_ - ny_);
-        Eigen::VectorXd phi_NN = phi_(interiorIndices_ + 2);
-        Eigen::VectorXd phi_SS = phi_(interiorIndices_ - 2);
-        Eigen::VectorXd phi_EE = phi_(interiorIndices_ + 2*ny_);
-        Eigen::VectorXd phi_WW = phi_(interiorIndices_ - 2*ny_);
+        Eigen::VectorXd phi_N  = phi_(interiorIndicesN_);   // offset views
+        Eigen::VectorXd phi_S  = phi_(interiorIndicesS_);
+        Eigen::VectorXd phi_E  = phi_(interiorIndicesE_);
+        Eigen::VectorXd phi_W  = phi_(interiorIndicesW_);
+        Eigen::VectorXd phi_NN = phi_(interiorIndicesNN_);
+        Eigen::VectorXd phi_SS = phi_(interiorIndicesSS_);
+        Eigen::VectorXd phi_EE = phi_(interiorIndicesEE_);
+        Eigen::VectorXd phi_WW = phi_(interiorIndicesWW_);
 
         Eigen::VectorXd u = u_vec_(interiorIndices_);
         Eigen::VectorXd v = v_vec_(interiorIndices_);
