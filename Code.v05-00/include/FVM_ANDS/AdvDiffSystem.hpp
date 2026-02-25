@@ -341,7 +341,7 @@ namespace FVM_ANDS{
                 double r = (phi_E - phi_P) / (phi_P - phi_W);
                 return std::max(0.0, std::min(r, 1.0));
             }
-            inline double minmod_nodiv(double a, double b){
+            inline double minmod_nodiv(double a, double b) const noexcept{
                 return (a * b <= 0.0) ? 0.0 :
                     (std::abs(a) < std::abs(b) ? a : b);
             }
