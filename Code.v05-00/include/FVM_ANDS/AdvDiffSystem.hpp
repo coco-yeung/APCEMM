@@ -343,7 +343,7 @@ namespace FVM_ANDS{
             }
             inline double minmod_nodiv(double a, double b) const noexcept{
                 return (a * b <= 0.0) ? 0.0 :
-                    (std::abs(a) < std::abs(b) ? a : b);
+                    (std::abs(a) > std::abs(b) ? b : a);
             }
             inline int neighbor_point(FaceDirection direction, int pointID) const noexcept{
                 Point* point = points_[pointID].get();
