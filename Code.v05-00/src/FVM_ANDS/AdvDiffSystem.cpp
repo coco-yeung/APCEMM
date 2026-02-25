@@ -629,36 +629,43 @@ namespace FVM_ANDS{
             double v_local = v_vec_[i];
             double phi_N_new, phi_S_new, phi_W_new, phi_E_new;
 
+            // select r =  dS if v >=0 else phi_NN - phi_N
+            // if either r or dN is negative, return zero
+            // else if r > dN, return dN
+            // else return r 
+
+            double dN = phi_N - phi_P;
+            double dS = phi_P - phi_S;
+
             if(v_local >= 0){
-                double r_N = (phi_N - phi_P == 0) ? 0 : (phi_P - phi_S) / (phi_N - phi_P);
-                double lim_N = std::max(0.0, std::min(r_N, 1.0));
-                phi_N_new = phi_P + 0.5 * lim_N * (phi_N - phi_P);
-                double r_S = (phi_P - phi_S == 0) ? 0 : (phi_S - phi_SS) / (phi_P - phi_S);
-                double lim_S = std::max(0.0, std::min(r_S, 1.0));
-                phi_S_new = phi_S + 0.5 * lim_S * (phi_P - phi_S);
+                double lim_N = minmod_nodiv(dS, dN);
+                phi_N_new = phi_P + 0.5 * lim_N;
+                double dSS = phi_S - phi_SS;
+                double lim_S = minmod_nodiv(dSS, dS);
+                phi_S_new = phi_S + 0.5 * lim_S;
             } else {
-                double r_N = (phi_N - phi_P == 0) ? 0 : (phi_NN - phi_N) / (phi_N - phi_P);
-                double lim_N = std::max(0.0, std::min(r_N, 1.0));
-                phi_N_new = phi_N + 0.5 * lim_N * (phi_P - phi_N);
-                double r_S = (phi_P - phi_S == 0 || neighbor_point(FaceDirection::NORTH, i)) ? 0 : (phi_N - phi_P) / (phi_P - phi_S);
-                double lim_S = std::max(0.0, std::min(r_S, 1.0));
-                phi_S_new = phi_P + 0.5 * lim_S * (phi_S - phi_P);
+                double dNN = phi_NN - phi_N;
+                double lim_N = minmod_nodiv(dNN, dN);
+                phi_N_new = phi_N - 0.5 * lim_N;
+                double lim_S = neighbor_point(FaceDirection::NORTH, i) ? 0 : minmod_nodiv(dN, dS);
+                phi_S_new = phi_P - 0.5 * lim_S;
             }
 
+            double dE = phi_E - phi_P;
+            double dW = phi_P - phi_W;
+
             if(u_local >= 0){
-                double r_E = (phi_E - phi_P == 0) ? 0 : (phi_P - phi_W) / (phi_E - phi_P);
-                double lim_E = std::max(0.0, std::min(r_E, 1.0));
-                phi_E_new = phi_P + 0.5 * lim_E * (phi_E - phi_P);
-                double r_W = (phi_P - phi_W == 0) ? 0 : (phi_W - phi_WW) / (phi_P - phi_W);
-                double lim_W = std::max(0.0, std::min(r_W, 1.0));
-                phi_W_new = phi_W + 0.5 * lim_W * (phi_P - phi_W);
+                double lim_E = minmod_nodiv(dW, dE);
+                phi_E_new = phi_P + 0.5 * lim_E;
+                double dWW = phi_W - phi_WW;
+                double lim_W = minmod_nodiv(dWW, dW);
+                phi_W_new = phi_W + 0.5 * lim_W;
             } else {
-                double r_E = (phi_E - phi_P == 0) ? 0 : (phi_EE - phi_E) / (phi_E - phi_P);
-                double lim_E = std::max(0.0, std::min(r_E, 1.0));
-                phi_E_new = phi_E + 0.5 * lim_E * (phi_P - phi_E);
-                double r_W = (phi_P - phi_W == 0) ? 0 : (phi_E - phi_P) / (phi_P - phi_W);
-                double lim_W = std::max(0.0, std::min(r_W, 1.0));
-                phi_W_new = phi_P + 0.5 * lim_W * (phi_W - phi_P);
+                double dEE = phi_EE - phi_E;
+                double lim_E = minmod_nodiv(dEE, dE);
+                phi_E_new = phi_E - 0.5 * lim_E;
+                double lim_W = minmod_nodiv(dE, dW);
+                phi_W_new = phi_P - 0.5 * lim_W;
             }
 
             soln[i] = dt_ * invdx_ * (u_local * phi_W_new - u_local * phi_E_new)
