@@ -578,7 +578,7 @@ namespace FVM_ANDS{
             if(points_[i]->bcType() != BoundaryConditionFlag::INTERIOR
             || !isValidPointID(i+2) || !isValidPointID(i-2)
             || !isValidPointID(i+2*ny_) || !isValidPointID(i-2*ny_)
-            || (neighbor_point(FaceDirection::NORTH, i)){
+            || neighbor_point(FaceDirection::NORTH, i)){
                 Point* point = points_[i].get();
                 FaceDirection direction = point->bcDirection();
                 isNorthBoundary = direction == FaceDirection::NORTH;
