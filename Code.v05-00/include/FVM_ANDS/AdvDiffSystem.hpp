@@ -341,6 +341,10 @@ namespace FVM_ANDS{
                 double r = (phi_E - phi_P) / (phi_P - phi_W);
                 return std::max(0.0, std::min(r, 1.0));
             }
+            inline double minmod_nodiv(double a, double b){
+                return (a * b <= 0.0) ? 0.0 :
+                    (std::abs(a) < std::abs(b) ? a : b);
+            }
             inline int neighbor_point(FaceDirection direction, int pointID) const noexcept{
                 Point* point = points_[pointID].get();
                 if(point->bcType() == BoundaryConditionFlag::INTERIOR) return neighbor_point_interior(direction, pointID);
