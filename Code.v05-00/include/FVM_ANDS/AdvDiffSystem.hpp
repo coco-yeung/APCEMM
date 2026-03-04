@@ -342,8 +342,10 @@ namespace FVM_ANDS{
                 return std::max(0.0, std::min(r, 1.0));
             }
             inline double minmod_nodiv(double a, double b) const noexcept{
-                return (a * b <= 0.0) ? 0.0 :
-                    (std::abs(a) > std::abs(b) ? b : a);
+                if (b == 0) return 0;
+                if (std::signbit(a) != std::signbit(b) || a == 0) return 0;
+                if (std::abs(a) >= std::abs(b)) return b;
+                return a;
             }
             inline int neighbor_point(FaceDirection direction, int pointID) const noexcept{
                 Point* point = points_[pointID].get();
