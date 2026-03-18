@@ -83,6 +83,7 @@ namespace FVM_ANDS{
 
         //Step 2: Solve Advection for half timestep
         advDiffSys_.updateTimestep(dt_adv);
+        advDiffSys_.makeAdvectionMatrix();
         for(int i = 0; i < n_timesteps_advection_half; i++){
             advDiffSys_.updatePhi(advDiffSys_.forwardEulerAdvection(operatorSplit, parallelAdvection));
         }
@@ -147,6 +148,7 @@ namespace FVM_ANDS{
         //Step 4: Explicitly solve advection to full timestep
 
         advDiffSys_.updateTimestep(dt_adv);
+        advDiffSys_.makeAdvectionMatrix();
         for(int i = 0; i < n_timesteps_advection_half; i++){
             advDiffSys_.updatePhi(advDiffSys_.forwardEulerAdvection(operatorSplit));
             //: inline void updatePhi(const Eigen::VectorXd& phi_new){ 

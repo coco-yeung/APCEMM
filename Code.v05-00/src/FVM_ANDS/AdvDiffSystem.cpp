@@ -32,8 +32,10 @@ namespace FVM_ANDS{
         nGhostPoints_ = 2*nx_ + 2*ny_;
         nTotalPoints_ = nInteriorPoints_ + nGhostPoints_;
 
-        u_vec_.resize(nInteriorPoints_);
-        v_vec_.resize(nInteriorPoints_);
+        u_vec_.resize(nTotalPoints_);
+        u_vec_.setZero();
+        v_vec_.resize(nTotalPoints_);
+        v_vec_.setZero();
         Dh_vec_.resize(nInteriorPoints_);
         Dv_vec_.resize(nInteriorPoints_);
         rhs_.resize(nTotalPoints_);
@@ -41,7 +43,7 @@ namespace FVM_ANDS{
         points_.reserve(nTotalPoints_);
         deferredCorr_.resize(nInteriorPoints_);
         deferredCorr_.setZero();
-        source_.resize(nInteriorPoints_);
+        source_.resize(nTotalPoints_);
         source_.setZero();
         std::generate_n(std::back_inserter(points_), nTotalPoints_, [] { return std::make_unique<Point>(); });
         totalCoefMatrix_.resize(nTotalPoints_, nTotalPoints_);
@@ -605,8 +607,42 @@ namespace FVM_ANDS{
         }
     }
 
+    void AdvDiffSystem::makeAdvectionMatrix(){
+        A_.resize(nTotalPoints_, nTotalPoints_);
+        B_.resize(nTotalPoints_, nTotalPoints_);
+        A_.setZero();
+        B_.setZero();
+
+        A_.reserve(Eigen::VectorXi::Constant(nTotalPoints_, 2));
+        B_.reserve(Eigen::VectorXi::Constant(nTotalPoints_, 2));
+        for(int i : interiorIndices_){
+            if (v_vec_[i] >= 0){
+                A_.insert(i, i-1) = 1.0;
+                A_.insert(i, i) = -1.0;
+            }
+            else{
+                A_.insert(i, i) = 1.0;
+                A_.insert(i, i+1) = -1.0;
+            }
+            if (u_vec_[i] >= 0){
+                B_.insert(i, i-ny_) = 1.0;
+                B_.insert(i, i) = -1.0;
+            }
+            else{
+                B_.insert(i, i) = 1.0;
+                B_.insert(i, i+ny_) = -1.0;
+            }
+        }
+        A_.makeCompressed();
+        B_.makeCompressed();
+    }
+
     Eigen::VectorXd AdvDiffSystem::forwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
         Eigen::VectorXd soln(nTotalPoints_);
+        Eigen::VectorXd lim_diffv = Eigen::VectorXd::Zero(nTotalPoints_);
+        Eigen::VectorXd lim_diffu = Eigen::VectorXd::Zero(nTotalPoints_);
+        Eigen::VectorXd phi_SN = Eigen::VectorXd::Zero(nTotalPoints_);
+        Eigen::VectorXd phi_WE = Eigen::VectorXd::Zero(nTotalPoints_);
 
         // double avgBackgroundCalcTime = 0;
         //Explicit Time-Stepping
@@ -627,7 +663,6 @@ namespace FVM_ANDS{
 
             double u_local = u_vec_[i];
             double v_local = v_vec_[i];
-            double phi_N_new, phi_S_new, phi_W_new, phi_E_new;
 
             // select r =  dS if v >=0 else phi_NN - phi_N
             // if either r or dN is negative, return zero
@@ -639,16 +674,14 @@ namespace FVM_ANDS{
 
             if(v_local >= 0){
                 double lim_N = minmod_nodiv(dS, dN);
-                phi_N_new = phi_P + 0.5 * lim_N;
                 double dSS = phi_S - phi_SS;
                 double lim_S = minmod_nodiv(dSS, dS);
-                phi_S_new = phi_S + 0.5 * lim_S;
+                lim_diffv[i] = lim_S - lim_N;
             } else {
                 double dNN = phi_NN - phi_N;
                 double lim_N = minmod_nodiv(dNN, dN);
-                phi_N_new = phi_N - 0.5 * lim_N;
                 double lim_S = neighbor_point(FaceDirection::NORTH, i) ? 0 : minmod_nodiv(dN, dS);
-                phi_S_new = phi_P - 0.5 * lim_S;
+                lim_diffv[i] = lim_N - lim_S;
             }
 
             double dE = phi_E - phi_P;
@@ -656,22 +689,29 @@ namespace FVM_ANDS{
 
             if(u_local >= 0){
                 double lim_E = minmod_nodiv(dW, dE);
-                phi_E_new = phi_P + 0.5 * lim_E;
                 double dWW = phi_W - phi_WW;
                 double lim_W = minmod_nodiv(dWW, dW);
-                phi_W_new = phi_W + 0.5 * lim_W;
+                lim_diffu[i] = lim_W - lim_E;
             } else {
                 double dEE = phi_EE - phi_E;
                 double lim_E = minmod_nodiv(dEE, dE);
-                phi_E_new = phi_E - 0.5 * lim_E;
                 double lim_W = minmod_nodiv(dE, dW);
-                phi_W_new = phi_P - 0.5 * lim_W;
+                lim_diffu[i] = lim_E - lim_W;
             }
-
-            soln[i] = dt_ * invdx_ * (u_local * phi_W_new - u_local * phi_E_new)
-                    + dt_ * invdy_ * (v_local * phi_S_new - v_local * phi_N_new)
-                    + source_[i] * dt_ + phi_P;
         }
+
+        // std::cout << "vlocal " << v_vec_[500] << std::endl;
+        // std::cout << "lim diff u " << lim_diffu[500] << std::endl;
+        // std::cout << "lim diff v " << lim_diffv[500] << std::endl;
+
+        phi_SN = A_ * phi_ + 0.5 * lim_diffv;
+        phi_WE = B_ * phi_ + 0.5 * lim_diffu;
+        // std::cout << "phi 499" << phi_[499] << std::endl;
+        // std::cout << "phi 500" << phi_[500] << std::endl;
+        // std::cout << "phi 501" << phi_[501] << std::endl;
+        // std::cout << "phi SN " << phi_SN[500] << std::endl;
+        // std::cout << "phi WE " << phi_WE[500] << std::endl;
+
 
         // double avgBackgroundCalcTime = 0;
         //Explicit Time-Stepping
@@ -726,11 +766,14 @@ namespace FVM_ANDS{
                 phi_E = phi_[pc.idx_E] + 0.5 * minmod_E_vNeg(i) * (phi_[i] - phi_[pc.idx_E]);
             }
 
-            //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
-            soln[i] = /*(!operatorSplit) * (Dh_ * dt_ * invdx_ * (dphi_dx_E - dphi_dx_W) + Dv_ * dt_ * invdy_ * (dphi_dy_N - dphi_dy_S))\*/
-                     dt_ * invdx_ * (u_local * phi_W - u_local * phi_E) + dt_ * invdy_ * (v_local * phi_S - v_local * phi_N)\
-                    + source_[i] * dt_ + phi_[i];
+            phi_SN[i] = phi_S - phi_N;
+            phi_WE[i] = phi_W - phi_E;
         }
+
+        soln = dt_ * invdx_ * u_vec_.cwiseProduct(phi_WE) 
+             + dt_ * invdy_ * v_vec_.cwiseProduct(phi_SN)
+             + dt_ * source_ + phi_;
+
         return soln;
     }
     
