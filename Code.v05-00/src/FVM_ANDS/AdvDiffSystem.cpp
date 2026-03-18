@@ -566,8 +566,6 @@ namespace FVM_ANDS{
             int idx_S = i - 1;
             double bcVal = 0.0, secondaryBcVal = 0.0;
 
-            //commenting out this results in ~30% speedup
-            //The calls involving the optional are maybe 1/3 of the cost. Maybe something to look at later.
             if(points_[i]->bcType() != BoundaryConditionFlag::INTERIOR
             || !isValidPointID(i+2) || !isValidPointID(i-2)
             || !isValidPointID(i+2*ny_) || !isValidPointID(i-2*ny_)){
@@ -582,12 +580,6 @@ namespace FVM_ANDS{
 
                 isWestBoundary = (direction == FaceDirection::WEST || secondaryWestBound);
                 isEastBoundary = (direction == FaceDirection::EAST || secondaryEastBound);
-
-                //only call this lookup function on boundary nodes which are inconsequential in number
-                idx_N = isNorthBoundary? point->corrPoint() : idx_N;
-                idx_S = isSouthBoundary? point->corrPoint() : idx_S;
-                idx_E = isEastBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_E;
-                idx_W = isWestBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_W;
 
                 bcVal = point->bcVal();
                 secondaryBcVal = secondaryWestBound || secondaryEastBound ? point->secondBoundaryConds()->bcVal : 0.0;
@@ -700,18 +692,8 @@ namespace FVM_ANDS{
             }
         }
 
-        // std::cout << "vlocal " << v_vec_[500] << std::endl;
-        // std::cout << "lim diff u " << lim_diffu[500] << std::endl;
-        // std::cout << "lim diff v " << lim_diffv[500] << std::endl;
-
         phi_SN = A_ * phi_ + 0.5 * lim_diffv;
         phi_WE = B_ * phi_ + 0.5 * lim_diffu;
-        // std::cout << "phi 499" << phi_[499] << std::endl;
-        // std::cout << "phi 500" << phi_[500] << std::endl;
-        // std::cout << "phi 501" << phi_[501] << std::endl;
-        // std::cout << "phi SN " << phi_SN[500] << std::endl;
-        // std::cout << "phi WE " << phi_WE[500] << std::endl;
-
 
         // double avgBackgroundCalcTime = 0;
         //Explicit Time-Stepping
