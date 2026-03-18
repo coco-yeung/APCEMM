@@ -2,6 +2,8 @@
 #include <chrono>
 #include <math.h>
 #include <iostream>
+#include <Eigen/Dense>
+#include <Eigen/Sparse>
 #include "APCEMM.h"
 
 namespace FVM_ANDS{
@@ -41,7 +43,7 @@ namespace FVM_ANDS{
         points_.reserve(nTotalPoints_);
         deferredCorr_.resize(nInteriorPoints_);
         deferredCorr_.setZero();
-        source_.resize(nInteriorPoints_);
+        source_.resize(nTotalPoints_);
         source_.setZero();
         std::generate_n(std::back_inserter(points_), nTotalPoints_, [] { return std::make_unique<Point>(); });
         totalCoefMatrix_.resize(nTotalPoints_, nTotalPoints_);
@@ -553,6 +555,11 @@ namespace FVM_ANDS{
         boundaryIndices_.clear();
         pointCache_.clear();
         pointCache_.resize(nInteriorPoints_);
+        A_ = Eigen::SparseMatrix<double>(nTotalPoints_, nTotalPoints_);
+        B_ = Eigen::SparseMatrix<double>(nTotalPoints_, nTotalPoints_);
+        
+        A_.reserve(Eigen::VectorXi::Constant(nTotalPoints_, 2));
+        B_.reserve(Eigen::VectorXi::Constant(nTotalPoints_, 2));
         
         for(int i = 0; i < nInteriorPoints_; i++){
             //When a boundary condition is in place, phi at the face can be directly calculated using the BC.
@@ -564,13 +571,15 @@ namespace FVM_ANDS{
             int idx_S = i - 1;
             double bcVal = 0.0, secondaryBcVal = 0.0;
 
-            //commenting out this results in ~30% speedup
-            //The calls involving the optional are maybe 1/3 of the cost. Maybe something to look at later.
             if(points_[i]->bcType() != BoundaryConditionFlag::INTERIOR
             || !isValidPointID(i+2) || !isValidPointID(i-2)
             || !isValidPointID(i+2*ny_) || !isValidPointID(i-2*ny_)){
                 Point* point = points_[i].get();
                 FaceDirection direction = point->bcDirection();
+                if(direction == FaceDirection::NORTH){
+                    isNorthBoundary = true;
+
+                }
                 isNorthBoundary = direction == FaceDirection::NORTH;
                 isSouthBoundary = direction == FaceDirection::SOUTH;
 
@@ -581,11 +590,11 @@ namespace FVM_ANDS{
                 isWestBoundary = (direction == FaceDirection::WEST || secondaryWestBound);
                 isEastBoundary = (direction == FaceDirection::EAST || secondaryEastBound);
 
-                //only call this lookup function on boundary nodes which are inconsequential in number
-                idx_N = isNorthBoundary? point->corrPoint() : idx_N;
-                idx_S = isSouthBoundary? point->corrPoint() : idx_S;
-                idx_E = isEastBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_E;
-                idx_W = isWestBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_W;
+                //this call is useless
+                // idx_N = isNorthBoundary? point->corrPoint() : idx_N;
+                // idx_S = isSouthBoundary? point->corrPoint() : idx_S;
+                // idx_E = isEastBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_E;
+                // idx_W = isWestBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_W;
 
                 bcVal = point->bcVal();
                 secondaryBcVal = secondaryWestBound || secondaryEastBound ? point->secondBoundaryConds()->bcVal : 0.0;
@@ -599,14 +608,44 @@ namespace FVM_ANDS{
 
                 boundaryIndices_.push_back(i);
             }
-            else {
+            else{
                 interiorIndices_.push_back(i);
+                if(v_vec_[i] >= 0){
+                    A_.insert(i, i-1) = 1.0;  // sub-diagonal
+                    A_.insert(i, i)   = -1.0;  // main diagonal
+                }
+                else{
+                    A_.insert(i, i)   = 1.0;  // main diagonal
+                    A_.insert(i, i+1) = -1.0;  // super-diagonal
+                }
+                if(u_vec_[i] >= 0){
+                    B_.insert(i, i-ny_) = 1.0;  // sub-diagonal
+                    B_.insert(i, i)   = -1.0;  // main diagonal
+                }
+                else{
+                    B_.insert(i, i)   = 1.0;  // main diagonal
+                    B_.insert(i, i+ny_) = -1.0;  // super-diagonal
+                }
             }
         }
+        A_.makeCompressed();
+        B_.makeCompressed();
+        std::cout << "A_ rows/cols: " << A_.rows() << " " << A_.cols() << "\n";
+        std::cout << "nTotalPoints_: " << nTotalPoints_ << "\n";
+
+        int i = interiorIndices_[0];
+        std::cout << "i=" << i << "\n";
+        std::cout << "A_.coeff(i,i)=" << A_.coeff(i,i) << "\n";
+        std::cout << "A_.coeff(i,i-1)=" << A_.coeff(i,i-1) << "\n";
+
     }
 
     Eigen::VectorXd AdvDiffSystem::forwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
         Eigen::VectorXd soln(nTotalPoints_);
+        Eigen::VectorXd lim_NS = Eigen::VectorXd::Zero(nTotalPoints_);
+        Eigen::VectorXd lim_EW = Eigen::VectorXd::Zero(nTotalPoints_);
+        Eigen::VectorXd phi_NS = Eigen::VectorXd::Zero(nTotalPoints_);
+        Eigen::VectorXd phi_EW = Eigen::VectorXd::Zero(nTotalPoints_);
 
         // double avgBackgroundCalcTime = 0;
         //Explicit Time-Stepping
@@ -627,7 +666,6 @@ namespace FVM_ANDS{
 
             double u_local = u_vec_[i];
             double v_local = v_vec_[i];
-            double phi_N_new, phi_S_new, phi_W_new, phi_E_new;
 
             // select r =  dS if v >=0 else phi_NN - phi_N
             // if either r or dN is negative, return zero
@@ -636,42 +674,42 @@ namespace FVM_ANDS{
 
             double dN = phi_N - phi_P;
             double dS = phi_P - phi_S;
+            
 
             if(v_local >= 0){
-                double lim_N = minmod_nodiv(dS, dN);
-                phi_N_new = phi_P + 0.5 * lim_N;
                 double dSS = phi_S - phi_SS;
-                double lim_S = minmod_nodiv(dSS, dS);
-                phi_S_new = phi_S + 0.5 * lim_S;
+                lim_NS[i] = minmod_nodiv(dSS, dS) - minmod_nodiv(dS, dN);
+                double phi_N_new = phi_P + 0.5*minmod_nodiv(dS, dN);
+                double phi_S_new = phi_S + 0.5*minmod_nodiv(dSS, dS);
+                // if(i = ijijiji) expected = phi_S_new - phi_N_new;
             } else {
                 double dNN = phi_NN - phi_N;
-                double lim_N = minmod_nodiv(dNN, dN);
-                phi_N_new = phi_N - 0.5 * lim_N;
-                double lim_S = neighbor_point(FaceDirection::NORTH, i) ? 0 : minmod_nodiv(dN, dS);
-                phi_S_new = phi_P - 0.5 * lim_S;
+                lim_NS[i] = neighbor_point(FaceDirection::NORTH, i) ? minmod_nodiv(dNN, dN) : minmod_nodiv(dNN, dN) - minmod_nodiv(dN, dS);
+                double phi_N_new = phi_P + 0.5*minmod_nodiv(dNN, dN);
+                double phi_S_new = phi_S + 0.5*minmod_nodiv(dN, dS);
+                // expected = phi_S_new - phi_N_new;
             }
 
             double dE = phi_E - phi_P;
             double dW = phi_P - phi_W;
 
             if(u_local >= 0){
-                double lim_E = minmod_nodiv(dW, dE);
-                phi_E_new = phi_P + 0.5 * lim_E;
                 double dWW = phi_W - phi_WW;
-                double lim_W = minmod_nodiv(dWW, dW);
-                phi_W_new = phi_W + 0.5 * lim_W;
+                lim_EW[i] = minmod_nodiv(dWW, dW) - minmod_nodiv(dW, dE);
             } else {
                 double dEE = phi_EE - phi_E;
-                double lim_E = minmod_nodiv(dEE, dE);
-                phi_E_new = phi_E - 0.5 * lim_E;
-                double lim_W = minmod_nodiv(dE, dW);
-                phi_W_new = phi_P - 0.5 * lim_W;
+                lim_EW[i] = minmod_nodiv(dEE, dE) - minmod_nodiv(dE, dW);
             }
-
-            soln[i] = dt_ * invdx_ * (u_local * phi_W_new - u_local * phi_E_new)
-                    + dt_ * invdy_ * (v_local * phi_S_new - v_local * phi_N_new)
-                    + source_[i] * dt_ + phi_P;
         }
+
+        phi_NS = (A_ * phi_ + 0.5*lim_NS);
+        phi_EW = (B_ * phi_ + 0.5*lim_EW);
+
+        // std::cout << "phi_NS[i]=" << phi_NS[ijijiji] << " expected=" << expected << "\n";
+        int i = interiorIndices_[0];
+        std::cout << "phi_[i]=" << phi_[i] << "\n";
+        std::cout << "phi_[i-1]=" << phi_[i-1] << "\n";
+        std::cout << "lim_NS[i]=" << lim_NS[i] << "\n";
 
         // double avgBackgroundCalcTime = 0;
         //Explicit Time-Stepping
@@ -696,6 +734,7 @@ namespace FVM_ANDS{
             else {
                 phi_N = phi_[pc.idx_N] + 0.5 * minmod_N_vNeg(i) * (phi_[i] - phi_[pc.idx_N]);
             }
+
             if(pc.isSouth){
                 phi_S = pc.bcVal;
             }
@@ -726,11 +765,17 @@ namespace FVM_ANDS{
                 phi_E = phi_[pc.idx_E] + 0.5 * minmod_E_vNeg(i) * (phi_[i] - phi_[pc.idx_E]);
             }
 
-            //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
-            soln[i] = /*(!operatorSplit) * (Dh_ * dt_ * invdx_ * (dphi_dx_E - dphi_dx_W) + Dv_ * dt_ * invdy_ * (dphi_dy_N - dphi_dy_S))\*/
-                     dt_ * invdx_ * (u_local * phi_W - u_local * phi_E) + dt_ * invdy_ * (v_local * phi_S - v_local * phi_N)\
-                    + source_[i] * dt_ + phi_[i];
+            phi_NS[i] = phi_S - phi_N;
+            phi_EW[i] = phi_W - phi_E;
+
+            // //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
+            // soln[i] = /*(!operatorSplit) * (Dh_ * dt_ * invdx_ * (dphi_dx_E - dphi_dx_W) + Dv_ * dt_ * invdy_ * (dphi_dy_N - dphi_dy_S))\*/
+            //          dt_ * invdx_ * (u_local * phi_W - u_local * phi_E) + dt_ * invdy_ * (v_local * phi_S - v_local * phi_N)\
+            //         + source_[i] * dt_ + phi_[i];
         }
+
+        soln = dt_*(invdx_*u_vec_.cwiseProduct(phi_EW) + invdy_*v_vec_.cwiseProduct(phi_NS) + source_) + phi_;
+
         return soln;
     }
     

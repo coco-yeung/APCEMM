@@ -182,6 +182,8 @@ namespace FVM_ANDS{
             std::vector<PointCache> pointCache_;
             std::vector<int> interiorIndices_;
             std::vector<int> boundaryIndices_;
+            Eigen::SparseMatrix<double> A_;
+            Eigen::SparseMatrix<double> B_;
 
             void initVelocVecs();
             void buildPointList();
