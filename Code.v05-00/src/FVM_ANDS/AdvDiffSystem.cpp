@@ -551,10 +551,19 @@ namespace FVM_ANDS{
     }
 
     void AdvDiffSystem::buildPointCache() {
+        // previously contained in forwardEulerAdvection
+        // build once since position of boundary and interior indices do not change
+        // if size of nx_ and ny_ do not change
         interiorIndices_.clear();
         boundaryIndices_.clear();
         pointCache_.clear();
         pointCache_.resize(nInteriorPoints_);
+        A_.resize(nTotalPoints_, nTotalPoints_);
+        B_.resize(nTotalPoints_, nTotalPoints_);
+        A_.setZero();
+        B_.setZero();
+        A_.reserve(Eigen::VectorXi::Constant(nTotalPoints_, 2));
+        B_.reserve(Eigen::VectorXi::Constant(nTotalPoints_, 2));
         
         for(int i = 0; i < nInteriorPoints_; i++){
             //When a boundary condition is in place, phi at the face can be directly calculated using the BC.
@@ -599,34 +608,50 @@ namespace FVM_ANDS{
         }
     }
 
-    void AdvDiffSystem::makeAdvectionMatrix(){
-        A_.resize(nTotalPoints_, nTotalPoints_);
-        B_.resize(nTotalPoints_, nTotalPoints_);
-        A_.setZero();
+    void AdvDiffSystem::makeAdvectionMatrix() {
+        int interior_idx_0 = interiorIndices_[0];
+        
+        bool signChanged = (v_vec_old_.size() == 0) || 
+                        (std::signbit(v_vec_[interior_idx_0]) != std::signbit(v_vec_old_[interior_idx_0]));
+        
+        if (signChanged) {
+            // Clear existing matrices (keep size but zero out)
+            if (A_.nonZeros() > 0) {
+                A_.setZero();
+                A_.prune(0.0);  // Remove zero entries
+            } else {
+                A_.resize(nTotalPoints_, nTotalPoints_);
+                A_.reserve(Eigen::VectorXi::Constant(nTotalPoints_, 2));
+            }
+            
+            // Rebuild A_ completely
+            for (int i : interiorIndices_) {
+                if (v_vec_[i] >= 0) {
+                    A_.insert(i, i-1) = 1.0;
+                    A_.insert(i, i) = -1.0;
+                } else {
+                    A_.insert(i, i) = 1.0;
+                    A_.insert(i, i+1) = -1.0;
+                }
+            }
+            A_.makeCompressed();
+        }
+        
+        // Always rebuild B_ (or conditionally based on u_vec_ changes)
         B_.setZero();
-
-        A_.reserve(Eigen::VectorXi::Constant(nTotalPoints_, 2));
-        B_.reserve(Eigen::VectorXi::Constant(nTotalPoints_, 2));
-        for(int i : interiorIndices_){
-            if (v_vec_[i] >= 0){
-                A_.insert(i, i-1) = 1.0;
-                A_.insert(i, i) = -1.0;
-            }
-            else{
-                A_.insert(i, i) = 1.0;
-                A_.insert(i, i+1) = -1.0;
-            }
-            if (u_vec_[i] >= 0){
+        
+        for (int i : interiorIndices_) {
+            if (u_vec_[i] >= 0) {
                 B_.insert(i, i-ny_) = 1.0;
                 B_.insert(i, i) = -1.0;
-            }
-            else{
+            } else {
                 B_.insert(i, i) = 1.0;
                 B_.insert(i, i+ny_) = -1.0;
             }
         }
-        A_.makeCompressed();
         B_.makeCompressed();
+        
+        v_vec_old_ = v_vec_;
     }
 
     Eigen::VectorXd AdvDiffSystem::forwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{

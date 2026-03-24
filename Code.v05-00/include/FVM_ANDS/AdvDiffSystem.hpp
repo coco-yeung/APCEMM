@@ -185,6 +185,7 @@ namespace FVM_ANDS{
             std::vector<int> boundaryIndices_;
             Eigen::SparseMatrix<double> A_;
             Eigen::SparseMatrix<double> B_;
+            Eigen::VectorXd v_vec_old_;
 
             void initVelocVecs();
             void buildPointList();
