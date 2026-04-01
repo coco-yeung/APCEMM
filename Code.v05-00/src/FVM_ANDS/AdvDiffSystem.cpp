@@ -549,6 +549,9 @@ namespace FVM_ANDS{
     }
 
     void AdvDiffSystem::buildPointCache() {
+        // previously contained in forwardEulerAdvection
+        // build once since position of boundary and interior indices do not change
+        // if size of nx_ and ny_ do not change
         interiorIndices_.clear();
         boundaryIndices_.clear();
         pointCache_.clear();
