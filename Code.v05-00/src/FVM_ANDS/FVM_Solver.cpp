@@ -74,7 +74,7 @@ namespace FVM_ANDS{
         double dt_adv = dt_max * (courant_max / courant);
 
         int n_timesteps_advection_half =  std::ceil((0.5 * dt_max) / dt_adv);
-        dt_adv = (0.5 * dt_max) / n_timesteps_advection_half;
+        dt_adv = (0.5 * dt_max); // / n_timesteps_advection_half;
 
         #ifdef ENABLE_TIMING
         std::cout << "              N Advection timesteps = 2 * " << n_timesteps_advection_half << std::endl;
@@ -83,9 +83,11 @@ namespace FVM_ANDS{
 
         //Step 2: Solve Advection for half timestep
         advDiffSys_.updateTimestep(dt_adv);
-        for(int i = 0; i < n_timesteps_advection_half; i++){
-            advDiffSys_.updatePhi(advDiffSys_.forwardEulerAdvection(operatorSplit, parallelAdvection));
-        }
+        // for(int i = 0; i < n_timesteps_advection_half; i++){
+        //     advDiffSys_.updatePhi(advDiffSys_.forwardEulerAdvection(operatorSplit, parallelAdvection));
+        // }
+        advDiffSys_.updatePhi(advDiffSys_.semiLagrangianAdvection());
+        advDiffSys_.updatePhi(advDiffSys_.forwardEulerAdvection(operatorSplit, parallelAdvection));
         advDiffSys_.applyBoundaryCondition();
 
         #ifdef ENABLE_TIMING
@@ -147,14 +149,17 @@ namespace FVM_ANDS{
         //Step 4: Explicitly solve advection to full timestep
 
         advDiffSys_.updateTimestep(dt_adv);
-        for(int i = 0; i < n_timesteps_advection_half; i++){
-            advDiffSys_.updatePhi(advDiffSys_.forwardEulerAdvection(operatorSplit));
-            //: inline void updatePhi(const Eigen::VectorXd& phi_new){ 
-                //Need to resize to account for grid changing in size.
-            //     phi_.resize(nx_ * ny_ + 2*nx_ + 2*ny_);
-            //     phi_(Eigen::seq(0, nx_ * ny_ - 1)) = phi_new(Eigen::seq(0, nx_ * ny_ - 1));
-            // }
-        }
+        // for(int i = 0; i < n_timesteps_advection_half; i++){
+        //     advDiffSys_.updatePhi(advDiffSys_.forwardEulerAdvection(operatorSplit));
+        //     //: inline void updatePhi(const Eigen::VectorXd& phi_new){ 
+        //         //Need to resize to account for grid changing in size.
+        //     //     phi_.resize(nx_ * ny_ + 2*nx_ + 2*ny_);
+        //     //     phi_(Eigen::seq(0, nx_ * ny_ - 1)) = phi_new(Eigen::seq(0, nx_ * ny_ - 1));
+        //     // }
+        // }
+
+        advDiffSys_.updatePhi(advDiffSys_.semiLagrangianAdvection());
+        advDiffSys_.updatePhi(advDiffSys_.forwardEulerAdvection(operatorSplit, parallelAdvection));
         advDiffSys_.applyBoundaryCondition();
 
         advDiffSys_.updateTimestep(dt_max);
