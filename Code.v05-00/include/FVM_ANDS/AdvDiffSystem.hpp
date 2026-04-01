@@ -43,6 +43,7 @@ namespace FVM_ANDS{
             void applyBoundaryCondition();
             void updateBoundaryCondition(const BoundaryConditions& bc);
             void buildPointCache();
+            Eigen::VectorXd semiLagrangianAdvection();
             Eigen::VectorXd forwardEulerAdvection(bool operatorSplit = false, bool parallelAdvection = false) const noexcept;
             // Breakup the implementation of sor_solve to allow for easy testing by inputing an arbitrary linear system to solve:
             // Implementation is moved outside of the class, and make class method to be used in code
@@ -182,6 +183,8 @@ namespace FVM_ANDS{
             std::vector<PointCache> pointCache_;
             std::vector<int> interiorIndices_;
             std::vector<int> boundaryIndices_;
+            Eigen::VectorXd dt_x_;
+            Eigen::VectorXd dt_y_;
 
             void initVelocVecs();
             void buildPointList();

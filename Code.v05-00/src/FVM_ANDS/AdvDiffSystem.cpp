@@ -556,6 +556,8 @@ namespace FVM_ANDS{
         boundaryIndices_.clear();
         pointCache_.clear();
         pointCache_.resize(nInteriorPoints_);
+        dt_x_.resize(nInteriorPoints_);
+        dt_y_.resize(nInteriorPoints_);
         
         for(int i = 0; i < nInteriorPoints_; i++){
             //When a boundary condition is in place, phi at the face can be directly calculated using the BC.
@@ -606,6 +608,63 @@ namespace FVM_ANDS{
                 interiorIndices_.push_back(i);
             }
         }
+    }
+
+    Eigen::VectorXd AdvDiffSystem::semiLagrangianAdvection(){
+        dt_x_.setZero();
+        dt_y_.setZero();
+        
+        Eigen::VectorXd soln(nTotalPoints_);
+        
+        //loop through every point
+        //check where it came from/ if outside domain, set to bcVal
+        for(int i = 0; i < nInteriorPoints_; i++){
+            int ix = i / ny_;
+            int iy = i % ny_;
+            double u_local = u_vec_[i];
+            double v_local = v_vec_[i];
+            int nx_steps;
+            int ny_steps;
+            
+            // find number of grids to move depending on velocity direciton
+            if (u_local >= 0){
+                nx_steps = std::floor(dt_ * u_local * invdx_);
+            }
+            else {
+                nx_steps = std::ceil(dt_ * u_local * invdx_);
+            }
+            if (v_local >= 0){
+                ny_steps = std::floor(dt_ * v_local * invdy_);
+            }
+            else {
+                ny_steps = std::ceil(dt_ * v_local * invdy_);
+            }
+
+            int ix_dep = ix - nx_steps;
+            int iy_dep = iy - ny_steps;
+
+            if (iy_dep < 0){
+                soln[i] = bcVals_top_[iy];
+            } 
+            else if(iy_dep + 1 > ny_){
+                soln[i] = bcVals_bot_[iy];
+            }
+            else if (ix_dep < 0){
+                soln[i] = bcVals_left_[ix];
+            } 
+            else if(ix_dep + 1 > nx_){
+                soln[i] = bcVals_right_[ix];
+            } 
+            else{
+                soln[i] = phi_[i - ix_dep * ny_ - iy_dep];
+            }
+
+            dt_x_[i] = u_local == 0 ? 0 : dt_ - nx_steps * dx_ / u_local;
+            dt_y_[i] = v_local == 0 ? 0 : dt_ - ny_steps * dy_ / v_local;
+
+        }
+
+        return soln;
     }
 
     Eigen::VectorXd AdvDiffSystem::forwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
@@ -671,8 +730,8 @@ namespace FVM_ANDS{
                 phi_W_new = phi_P - 0.5 * lim_W;
             }
 
-            soln[i] = dt_ * invdx_ * (u_local * phi_W_new - u_local * phi_E_new)
-                    + dt_ * invdy_ * (v_local * phi_S_new - v_local * phi_N_new)
+            soln[i] = dt_x_[i] * invdx_ * (u_local * phi_W_new - u_local * phi_E_new)
+                    + dt_y_[i] * invdy_ * (v_local * phi_S_new - v_local * phi_N_new)
                     + source_[i] * dt_ + phi_P;
         }
 
@@ -731,7 +790,7 @@ namespace FVM_ANDS{
 
             //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
             soln[i] = /*(!operatorSplit) * (Dh_ * dt_ * invdx_ * (dphi_dx_E - dphi_dx_W) + Dv_ * dt_ * invdy_ * (dphi_dy_N - dphi_dy_S))\*/
-                     dt_ * invdx_ * (u_local * phi_W - u_local * phi_E) + dt_ * invdy_ * (v_local * phi_S - v_local * phi_N)\
+                     dt_x_[i] * invdx_ * (u_local * phi_W - u_local * phi_E) + dt_y_[i] * invdy_ * (v_local * phi_S - v_local * phi_N)\
                     + source_[i] * dt_ + phi_[i];
         }
         return soln;
