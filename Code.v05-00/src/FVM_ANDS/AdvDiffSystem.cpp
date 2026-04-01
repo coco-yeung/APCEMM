@@ -662,6 +662,7 @@ namespace FVM_ANDS{
             dt_x_[i] = u_local == 0 ? 0 : dt_ - nx_steps * dx_ / u_local;
             dt_y_[i] = v_local == 0 ? 0 : dt_ - ny_steps * dy_ / v_local;
 
+            std::cout << soln[i] << std::endl;
         }
 
         return soln;
@@ -733,6 +734,8 @@ namespace FVM_ANDS{
             soln[i] = dt_x_[i] * invdx_ * (u_local * phi_W_new - u_local * phi_E_new)
                     + dt_y_[i] * invdy_ * (v_local * phi_S_new - v_local * phi_N_new)
                     + source_[i] * dt_ + phi_P;
+            
+            std::cout << soln[i] << std::endl;
         }
 
         // double avgBackgroundCalcTime = 0;
@@ -792,6 +795,8 @@ namespace FVM_ANDS{
             soln[i] = /*(!operatorSplit) * (Dh_ * dt_ * invdx_ * (dphi_dx_E - dphi_dx_W) + Dv_ * dt_ * invdy_ * (dphi_dy_N - dphi_dy_S))\*/
                      dt_x_[i] * invdx_ * (u_local * phi_W - u_local * phi_E) + dt_y_[i] * invdy_ * (v_local * phi_S - v_local * phi_N)\
                     + source_[i] * dt_ + phi_[i];
+
+            std::cout << soln[i] << std::endl;
         }
         return soln;
     }
