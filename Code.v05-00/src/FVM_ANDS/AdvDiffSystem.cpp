@@ -662,34 +662,34 @@ namespace FVM_ANDS{
             dt_x_[i] = u_local == 0 ? 0 : dt_ - nx_steps * dx_ / u_local;
             dt_y_[i] = v_local == 0 ? 0 : dt_ - ny_steps * dy_ / v_local;
 
-            if (i == 18328) {
-                std::cout << "u " << u_local << std::endl;
-                std::cout << "v " << v_local << std::endl;
-                std::cout << "dt "<< dt_ << std::endl;
-                std::cout << "dx "<< dx_ << std::endl;
-                std::cout << "dy "<< dy_ << std::endl;
-                std::cout << "nx "<< nx_ << std::endl;
-                std::cout << "ny "<< ny_ << std::endl;
-                std::cout << "source " << source_[i] << std::endl;
-                std::cout << "phi_P" << phi_[i] << std::endl;
-                std::cout << "nx_steps " << nx_steps << std::endl;
-                std::cout << "ix_dep " << ix_dep << std::endl;
-                std::cout << "iy_dep " << iy_dep << std::endl;
-                std::cout << "ix " << ix << std::endl;
-                std::cout << "iy" << iy << std::endl;
-                std::cout << "new i " << i - ix_dep * ny_ - iy_dep << std::endl;
-                std::cout << "interior "<< i << " " << soln[i] << std::endl;
-                std::cout << "N "<< i + 1 << " " << phi_[i + 1] << std::endl;
-                std::cout << "S "<< i - 1 << " " << phi_[i - 1] << std::endl;
-                std::cout << "E "<< i + ny_ << " " << phi_[i + ny_] << std::endl;
-                std::cout << "W "<< i - ny_ << " " << phi_[i - ny_] << std::endl;
-            }
+            // if (i == 18328) {
+            //     std::cout << "u " << u_local << std::endl;
+            //     std::cout << "v " << v_local << std::endl;
+            //     std::cout << "dt "<< dt_ << std::endl;
+            //     std::cout << "dx "<< dx_ << std::endl;
+            //     std::cout << "dy "<< dy_ << std::endl;
+            //     std::cout << "nx "<< nx_ << std::endl;
+            //     std::cout << "ny "<< ny_ << std::endl;
+            //     std::cout << "source " << source_[i] << std::endl;
+            //     std::cout << "phi_P" << phi_[i] << std::endl;
+            //     std::cout << "nx_steps " << nx_steps << std::endl;
+            //     std::cout << "ix_dep " << ix_dep << std::endl;
+            //     std::cout << "iy_dep " << iy_dep << std::endl;
+            //     std::cout << "ix " << ix << std::endl;
+            //     std::cout << "iy" << iy << std::endl;
+            //     std::cout << "new i " << i - ix_dep * ny_ - iy_dep << std::endl;
+            //     std::cout << "interior "<< i << " " << soln[i] << std::endl;
+            //     std::cout << "N "<< i + 1 << " " << phi_[i + 1] << std::endl;
+            //     std::cout << "S "<< i - 1 << " " << phi_[i - 1] << std::endl;
+            //     std::cout << "E "<< i + ny_ << " " << phi_[i + ny_] << std::endl;
+            //     std::cout << "W "<< i - ny_ << " " << phi_[i - ny_] << std::endl;
+            // }
 
             // if (phi_[i] != 0) {std::cout << i << " " << phi_[i] << std::endl;}
         }
 
         // std::cout << "Part one complete" << std::endl;
-        std::cout << soln[18148] << std::endl;
+        // std::cout << soln[18148] << std::endl;
 
         return soln;
     }
@@ -757,23 +757,23 @@ namespace FVM_ANDS{
                 phi_W_new = phi_P - 0.5 * lim_W;
             }
 
-            soln[i] = dt_x_[i] * invdx_ * (u_local * phi_W_new - u_local * phi_E_new)
-                    + dt_y_[i] * invdy_ * (v_local * phi_S_new - v_local * phi_N_new)
+            soln[i] = 0.5 * dt_x_[i] * invdx_ * (u_local * phi_W_new - u_local * phi_E_new)
+                    + 0.5 * dt_y_[i] * invdy_ * (v_local * phi_S_new - v_local * phi_N_new)
                     + source_[i] * dt_ + phi_P;
             
             // if (soln[i] != 0) {std::cout << i << soln[i] << std::endl;}
-            if (i == 18328) {
-                std::cout << "u " << u_local << std::endl;
-                std::cout << "v " << v_local << std::endl;
-                std::cout << "dt "<< dt_ << std::endl;
-                std::cout << "dx "<< dt_x_[i] << std::endl;
-                std::cout << "dy "<< dt_y_[i] << std::endl;
-                std::cout << "phi_W_new" << phi_W_new << std::endl;
-                std::cout << "phi_E_new" << phi_E_new << std::endl;
-                std::cout << "phi_S_new" << phi_S_new << std::endl;
-                std::cout << "phi_N_new" << phi_N_new << std::endl;
-                std::cout << soln[i] << std::endl;
-            }
+            // if (i == 18328) {
+            //     std::cout << "u " << u_local << std::endl;
+            //     std::cout << "v " << v_local << std::endl;
+            //     std::cout << "dt "<< dt_ << std::endl;
+            //     std::cout << "dx "<< dt_x_[i] << std::endl;
+            //     std::cout << "dy "<< dt_y_[i] << std::endl;
+            //     std::cout << "phi_W_new" << phi_W_new << std::endl;
+            //     std::cout << "phi_E_new" << phi_E_new << std::endl;
+            //     std::cout << "phi_S_new" << phi_S_new << std::endl;
+            //     std::cout << "phi_N_new" << phi_N_new << std::endl;
+            //     std::cout << soln[i] << std::endl;
+            // }
             //     std::cout << "source " << source_[i] << std::endl;
             //     std::cout << "phi_P" << phi_P << std::endl;
             //     std::cout << "interior "<< i << " " << soln[i] << std::endl;
@@ -835,10 +835,10 @@ namespace FVM_ANDS{
 
             //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
             soln[i] = /*(!operatorSplit) * (Dh_ * dt_ * invdx_ * (dphi_dx_E - dphi_dx_W) + Dv_ * dt_ * invdy_ * (dphi_dy_N - dphi_dy_S))\*/
-                     dt_x_[i] * invdx_ * (u_local * phi_W - u_local * phi_E) + dt_y_[i] * invdy_ * (v_local * phi_S - v_local * phi_N)\
+                     0.5 * dt_x_[i] * invdx_ * (u_local * phi_W - u_local * phi_E) + 0.5 * dt_y_[i] * invdy_ * (v_local * phi_S - v_local * phi_N)\
                     + source_[i] * dt_ + phi_[i];
 
-            if (soln[i] != 0) {std::cout << i << soln[i] << std::endl;}
+            // if (soln[i] != 0) {std::cout << i << soln[i] << std::endl;}
         }
         // std::cout << "Part two complete" << std::endl;
         return soln;
