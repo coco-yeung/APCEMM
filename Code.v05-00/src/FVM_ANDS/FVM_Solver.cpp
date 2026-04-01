@@ -88,6 +88,7 @@ namespace FVM_ANDS{
         // }
         advDiffSys_.updatePhi(advDiffSys_.semiLagrangianAdvection());
         advDiffSys_.updatePhi(advDiffSys_.forwardEulerAdvection(operatorSplit, parallelAdvection));
+        throw std::runtime_error("NaN residual encountered");
         advDiffSys_.applyBoundaryCondition();
 
         #ifdef ENABLE_TIMING
