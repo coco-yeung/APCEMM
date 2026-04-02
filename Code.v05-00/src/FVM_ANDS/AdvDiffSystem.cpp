@@ -644,16 +644,16 @@ namespace FVM_ANDS{
             int iy_dep = iy - ny_steps;
 
             if (iy_dep < 0){
-                soln[i] = bcVals_top_[iy];
+                soln[i] = bcVals_top_[ix];
             } 
             else if(iy_dep + 1 > ny_){
-                soln[i] = bcVals_bot_[iy];
+                soln[i] = bcVals_bot_[ix];
             }
             else if (ix_dep < 0){
-                soln[i] = bcVals_left_[ix];
+                soln[i] = bcVals_left_[iy];
             } 
             else if(ix_dep + 1 > nx_){
-                soln[i] = bcVals_right_[ix];
+                soln[i] = bcVals_right_[iy];
             } 
             else{
                 soln[i] = phi_[ix_dep * ny_ + iy_dep];
