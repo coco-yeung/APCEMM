@@ -643,7 +643,7 @@ namespace FVM_ANDS{
                 int iy_1 = static_cast<int>(std::floor(iy_temp));
                 int iy_2 = std::min(iy_1 + 1, ny_ - 1);
                 double wy = iy_temp - iy_1;
-                soln[i] = lerp(bcVals_right_[iy_1], bcVals_right_[iy_2], wy) + source_[i] * dt_;
+                soln[i] = lerp(bcVals_left_[iy_1], bcVals_left_[iy_2], wy) + source_[i] * dt_;
                 continue;
             }
             else if (ix_dep > nx_ - 1){
@@ -651,7 +651,7 @@ namespace FVM_ANDS{
                 int iy_1 = static_cast<int>(std::floor(iy_temp));
                 int iy_2 = std::min(iy_1 + 1, ny_ - 1);
                 double wy = iy_temp - iy_1;
-                soln[i] = lerp(bcVals_left_[iy_1], bcVals_left_[iy_2], wy) + source_[i] * dt_;
+                soln[i] = lerp(bcVals_right_[iy_1], bcVals_right_[iy_2], wy) + source_[i] * dt_;
                 continue;
             }
 
