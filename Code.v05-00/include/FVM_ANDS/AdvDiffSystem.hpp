@@ -43,6 +43,7 @@ namespace FVM_ANDS{
             void applyBoundaryCondition();
             void updateBoundaryCondition(const BoundaryConditions& bc);
             void buildPointCache();
+            Eigen::VectorXd semiLagrangianAdvection(bool parallelAdvection = false) const noexcept;
             Eigen::VectorXd forwardEulerAdvection(bool operatorSplit = false, bool parallelAdvection = false) const noexcept;
             // Breakup the implementation of sor_solve to allow for easy testing by inputing an arbitrary linear system to solve:
             // Implementation is moved outside of the class, and make class method to be used in code
@@ -346,6 +347,10 @@ namespace FVM_ANDS{
                 if (std::signbit(a) != std::signbit(b) || a == 0) return 0;
                 if (std::abs(a) >= std::abs(b)) return b;
                 return a;
+            }
+            // Helper for linear interpolation
+            inline double lerp(double a, double b, double w) const noexcept{
+                return a + w * (b - a);
             }
             inline int neighbor_point(FaceDirection direction, int pointID) const noexcept{
                 Point* point = points_[pointID].get();

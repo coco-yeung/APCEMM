@@ -608,6 +608,84 @@ namespace FVM_ANDS{
         }
     }
 
+    Eigen::VectorXd AdvDiffSystem::semiLagrangianAdvection(bool parallelAdvection) const noexcept{
+        Eigen::VectorXd soln(nTotalPoints_);
+
+        for(int i = 0; i < nInteriorPoints_; i++){
+            double ix = i / ny_;
+            double iy = i % ny_;
+            double u_local = u_vec_[i];
+            double v_local = v_vec_[i];
+            
+            // find departure point
+            double ix_dep = ix - u_local * dt_ * invdx_;
+            double iy_dep = iy - v_local * dt_ * invdy_;
+
+            // if departure point is outside boundary
+            if (iy_dep < 0){
+                double ix_temp = std::max(0.0, std::min(ix_dep, nx_ - 1.0));
+                int ix_1 = static_cast<int>(std::floor(ix_temp));
+                int ix_2 = std::min(ix_1 + 1, nx_ - 1);
+                double wx = ix_temp - ix_1;
+                soln[i] = lerp(bcVals_bot_[ix_1], bcVals_bot_[ix_2], wx) + source_[i] * dt_;
+                continue;
+            }
+            else if (iy_dep > ny_ - 1){
+                double ix_temp = std::max(0.0, std::min(ix_dep, nx_ - 1.0));
+                int ix_1 = static_cast<int>(std::floor(ix_temp));
+                int ix_2 = std::min(ix_1 + 1, nx_ - 1);
+                double wx = ix_temp - ix_1;
+                soln[i] = lerp(bcVals_top_[ix_1], bcVals_top_[ix_2], wx) + source_[i] * dt_;
+                continue;
+            }
+            else if (ix_dep < 0){
+                double iy_temp = std::max(0.0, std::min(iy_dep, ny_ - 1.0));
+                int iy_1 = static_cast<int>(std::floor(iy_temp));
+                int iy_2 = std::min(iy_1 + 1, ny_ - 1);
+                double wy = iy_temp - iy_1;
+                soln[i] = lerp(bcVals_right_[iy_1], bcVals_right_[iy_2], wy) + source_[i] * dt_;
+                continue;
+            }
+            else if (ix_dep > nx_ - 1){
+                double iy_temp = std::max(0.0, std::min(iy_dep, ny_ - 1.0));
+                int iy_1 = static_cast<int>(std::floor(iy_temp));
+                int iy_2 = std::min(iy_1 + 1, ny_ - 1);
+                double wy = iy_temp - iy_1;
+                soln[i] = lerp(bcVals_left_[iy_1], bcVals_left_[iy_2], wy) + source_[i] * dt_;
+                continue;
+            }
+
+            // find 4 nearest points
+            int ix_1 = static_cast<int>(std::floor(ix_dep));
+            int iy_1 = static_cast<int>(std::floor(iy_dep));
+            int ix_2 = std::min(ix_1 + 1, nx_ - 1);
+            int iy_2 = std::min(iy_1 + 1, ny_ - 1);
+
+            // find fractional weight
+            double wx = ix_dep - ix_1;
+            double wy = iy_dep - iy_1;
+
+            // convert into phi indexing
+            ix_1 *= ny_;
+            ix_2 *= ny_;
+
+            // find phi values of 4 nearest points
+            double phi_11 = phi_[ix_1 + iy_1];
+            double phi_12 = phi_[ix_1 + iy_2];
+            double phi_21 = phi_[ix_2 + iy_1];
+            double phi_22 = phi_[ix_2 + iy_2];
+
+
+            // linear interpolate horizontal
+            double phi_x1 = lerp(phi_11, phi_21, wx);
+            double phi_x2 = lerp(phi_12, phi_22, wx);
+            // vertical
+            soln[i] = lerp(phi_x1, phi_x2, wy) + source_[i] * dt_;
+
+        }
+        return soln;
+    }
+
     Eigen::VectorXd AdvDiffSystem::forwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
         Eigen::VectorXd soln(nTotalPoints_);
 
