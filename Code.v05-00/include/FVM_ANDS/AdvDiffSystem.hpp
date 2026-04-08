@@ -5,8 +5,10 @@
 #include "FVM_ANDS/BoundaryCondition.hpp"
 #include "FVM_ANDS_HelperFunctions.hpp"
 #include <memory>
+#include <variant>
 
 namespace FVM_ANDS{
+    using PointVariant = std::variant<Point, IntBoundPoint, GhostPoint>;
 
     // Separate the SOR solver for testing without having to build an AdvDiffSystem object
     void sor_solve(const Eigen::SparseMatrix<double, Eigen::RowMajor> &A, const Eigen::VectorXd &rhs, Eigen::VectorXd &phi, double omega = 1.0, double threshold = 1e-3, int n_iters = 3);
@@ -43,7 +45,14 @@ namespace FVM_ANDS{
             };
             inline const Eigen::VectorXd& getRHS() const { return rhs_; }
             inline const Eigen::VectorXd& phi() const { return phi_; }
-            inline const std::vector<std::unique_ptr<Point>>& points() const { return points_; }
+
+            inline const std::vector<PointVariant>& points() const { return points_; }
+            inline const std::vector<BoundaryConditionFlag>& bcCache() const { return bcCache_; }
+            inline const std::vector<double>& valCache() const { return valCache_; }
+            inline const std::vector<FaceDirection>& directionCache() const { return directionCache_; }
+            inline const std::vector<std::optional<BoundaryCondDescription>>& secondBoundaryCache() const { return secondBoundaryCache_; };
+            inline const std::vector<int>& corrCache() const { return corrCache_; }
+            
             inline const Eigen::SparseMatrix<double, Eigen::RowMajor>& getCoefMatrix() const { 
                 // If using prebuilt matrix, this instance of AdvDiffSystem does not have its own
                 // totalCoefMatrix_, instead it holds a pointer to a shared matrix held in another AdvDiffSystem
@@ -62,6 +71,7 @@ namespace FVM_ANDS{
                 shared_totalCoefMatrixPtr_ = matrixPtr;
                 use_shared_totalCoefMatrix_ = true;
             }
+
             inline void updatePhi(const Eigen::VectorXd& phi_new){ 
                 //Need to resize to account for grid changing in size.
                 phi_.resize(nx_ * ny_ + 2*nx_ + 2*ny_);
@@ -163,7 +173,12 @@ namespace FVM_ANDS{
             Vector_1D bcVals_left_;
             Vector_1D bcVals_right_; 
             Vector_1D bcVals_bot_;
-            std::vector<std::unique_ptr<Point>> points_;
+            std::vector<PointVariant> points_;
+            std::vector<BoundaryConditionFlag> bcCache_;  // Cache bcType()
+            std::vector<double> valCache_;
+            std::vector<FaceDirection> directionCache_;   // Cache bcDirection()
+            std::vector<std::optional<BoundaryCondDescription>> secondBoundaryCache_;    // Cache secondBoundaryConds()
+            std::vector<int> corrCache_;   // Cache corrPoint()
             Eigen::SparseMatrix<double, Eigen::RowMajor> totalCoefMatrix_;
             std::shared_ptr<const Eigen::SparseMatrix<double, Eigen::RowMajor>> shared_totalCoefMatrixPtr_;
             bool use_shared_totalCoefMatrix_ = false;
@@ -176,6 +191,24 @@ namespace FVM_ANDS{
             void buildPointList();
             void buildAdvectionCoeffs(int i, double& coeff_C, double& coeff_N, double& coeff_S, double& coeff_E, double& coeff_W);
             void updateGhostNodes();
+            
+            // Helper to create points
+            template<typename T, typename... Args>
+            void addPoint(int idx, Args&&... args) {
+                points_[idx] = T{std::forward<Args>(args)...};
+            }
+
+            // Helper to visit the variant and call a method
+            template<typename Func>
+            auto visitPoint(int idx, Func&& func) const {
+                return std::visit(std::forward<Func>(func), points_[idx]);
+            }
+
+            // non const version for setter methods
+            template<typename Func>
+            auto visitPoint(int idx, Func&& func) {
+                return std::visit(std::forward<Func>(func), points_[idx]);
+            }
 
             inline bool isValidPointID(int idx) const {
                 return (idx >= 0 && idx < phi_.rows());
@@ -331,16 +364,18 @@ namespace FVM_ANDS{
                 return std::max(0.0, std::min(r, 1.0));
             }
             inline int neighbor_point(FaceDirection direction, int pointID) const noexcept{
-                Point* point = points_[pointID].get();
-                if(point->bcType() == BoundaryConditionFlag::INTERIOR) return neighbor_point_interior(direction, pointID);
-                
-                if(point->bcDirection() == direction){
-                    return point->corrPoint();
-                }
-                else if (point->secondBoundaryConds() && point->secondBoundaryConds().value().direction == direction){
-                    return point->secondBoundaryConds().value().corrPoint;
-                }
-                return neighbor_point_interior(direction, pointID);        
+                return std::visit([&](const auto& point) -> int {
+                    if(point.bcType() == BoundaryConditionFlag::INTERIOR) 
+                        return neighbor_point_interior(direction, pointID);
+                    
+                    if(point.bcDirection() == direction){
+                        return point.corrPoint();
+                    }
+                    else if (point.secondBoundaryConds() && point.secondBoundaryConds().value().direction == direction){
+                        return point.secondBoundaryConds().value().corrPoint;
+                    }
+                    return neighbor_point_interior(direction, pointID);
+                }, points_[pointID]);
             }
             inline int neighbor_point_interior(FaceDirection direction, int pointID) const noexcept{
                 switch(direction){
