@@ -1014,26 +1014,28 @@ void sor_solve(const Eigen::SparseMatrix<double, Eigen::RowMajor> &A, const Eige
         const int* outerIdxPtr = A.outerIndexPtr();
 
         for(int iteration = 0; iteration < n_iters; iteration++){
-            int outerIdx = 0;
+            // Optimization: carry rowStartIdx across iterations to halve outerIdxPtr lookups
+            int rowStartIdx = outerIdxPtr[0];
 
             for (int i = 0; i < rhs.size(); i++) {
                 double x_i = 0;
-                int rowStartIdx = outerIdxPtr[outerIdx];
-                int rowEndIdx = outerIdxPtr[outerIdx + 1];
-                for (int j = rowStartIdx; j < rowEndIdx; j++) {
+                int rowEndIdx = outerIdxPtr[i + 1];
 
-                    if (innerIdxPtr[j] == i) {
+                for (int j = rowStartIdx; j < rowEndIdx; j++) {
+                    double inner_j = innerIdxPtr[j];
+
+                    if (inner_j == i) {
                         diagCoeff = valuePtr[j];
                         continue;
                     }
-                    x_i -= valuePtr[j] * phi[innerIdxPtr[j]];
+                    x_i -= valuePtr[j] * phi[inner_j];
                 }
                 x_i += rhs[i];
 
                 x_i *= omega / diagCoeff;
                 x_i += (1 - omega) * phi[i];
                 phi[i] = x_i;
-                outerIdx++;
+                rowStartIdx = rowEndIdx; // carry forward for next i
             } // end inner for loop
         } // end iters for loop
     
