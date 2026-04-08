@@ -17,7 +17,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     include(CheckCXXCompilerFlag)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0 -Wall -Wextra -Wconversion")
     #add_compile_options(-fno-omit-frame-pointer -fsanitize=bounds -fsanitize=address -fsanitize=undefined)
-    #add_link_options(-fsanitize=bounds -fsanitize=address -fsanitize=undefined)
+    #add_link_options(-fsanitize=bounds -fsanitize=address -fsanitize=undefined)s
     add_compile_options(-fno-omit-frame-pointer -fsanitize=bounds -fsanitize=undefined)
     add_link_options(-fsanitize=bounds -fsanitize=undefined)
 elseif (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")

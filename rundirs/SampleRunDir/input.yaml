@@ -171,7 +171,7 @@ METEOROLOGY MENU:
   #- OR -------------------+
   IMPOSE MOIST LAYER DEPTH SUBMENU:
   # Sets constant RHi for the entire layer defined by Moist layer depth
-    Impose moist layer depth (T/F): T
+    Impose moist layer depth (T/F): F
     Moist layer depth [m] (double): 1000
     Subsaturated air RHi [%] (double): 80
   #- OR -----------------+

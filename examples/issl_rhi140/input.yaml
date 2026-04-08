@@ -2,7 +2,7 @@ SIMULATION MENU:
   # Only one of parameter sweep or MC simulation can be on.
   # Parameter sweep lets you specify an arbitrary number of custom values for each parameter; Monte Carlo simulation is self-explanatory.
   # At the moment, you cannot mix and match MC sim and param sweep on each individual parameter.
-  OpenMP Num Threads (positive int): 1
+  OpenMP Num Threads (positive int): 1 
   PARAM SWEEP SUBMENU:
     Parameter sweep (T/F): T
   #-OR---------------
@@ -46,7 +46,7 @@ PARAMETER MENU:
   #                        : Example: 200:240 will generate values for the parameter in between 200 and 240
 
   # Maximum simulation time if contrail isn't gone by then:
-  Plume Process [hr] (double): 12
+  Plume Process [hr] (double): 14
 
   # Temperature, RH, and wind shear can be overwritten if using meteorological input files
   METEOROLOGICAL PARAMETERS SUBMENU:
