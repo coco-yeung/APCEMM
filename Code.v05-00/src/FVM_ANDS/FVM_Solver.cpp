@@ -87,8 +87,7 @@ namespace FVM_ANDS{
         //     advDiffSys_.updatePhi(advDiffSys_.forwardEulerAdvection(operatorSplit, parallelAdvection));
         // }
         advDiffSys_.updatePhi(advDiffSys_.semiLagrangianAdvection());
-        advDiffSys_.updateTimestep(dt_adv * 0.5);
-        advDiffSys_.updatePhi(advDiffSys_.forwardEulerAdvection(operatorSplit, parallelAdvection));
+        advDiffSys_.updateTimestep(dt_adv);
         advDiffSys_.updatePhi(advDiffSys_.forwardEulerAdvection(operatorSplit, parallelAdvection));
         advDiffSys_.applyBoundaryCondition();
 
@@ -161,8 +160,7 @@ namespace FVM_ANDS{
         // }
 
         advDiffSys_.updatePhi(advDiffSys_.semiLagrangianAdvection());
-        advDiffSys_.updateTimestep(dt_adv * 0.5);
-        advDiffSys_.updatePhi(advDiffSys_.forwardEulerAdvection(operatorSplit, parallelAdvection));
+        advDiffSys_.updateTimestep(dt_adv);
         advDiffSys_.updatePhi(advDiffSys_.forwardEulerAdvection(operatorSplit, parallelAdvection));
         advDiffSys_.applyBoundaryCondition();
 
