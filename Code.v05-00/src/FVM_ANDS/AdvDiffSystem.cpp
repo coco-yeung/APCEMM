@@ -694,7 +694,7 @@ namespace FVM_ANDS{
         return soln;
     }
 
-    Eigen::VectorXd AdvDiffSystem::forwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
+    Eigen::VectorXd AdvDiffSystem::yForwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
         Eigen::VectorXd soln(nTotalPoints_);
 
         // double avgBackgroundCalcTime = 0;
@@ -707,16 +707,11 @@ namespace FVM_ANDS{
             double phi_P  = phi_[i];
             double phi_N  = phi_[i + 1];
             double phi_S  = phi_[i - 1];
-            double phi_E  = phi_[i + ny_];
-            double phi_W  = phi_[i - ny_];
             double phi_NN = phi_[i + 2];
             double phi_SS = phi_[i - 2];
-            double phi_EE = phi_[i + 2*ny_];
-            double phi_WW = phi_[i - 2*ny_];
 
-            double u_local = u_vec_[i];
             double v_local = v_vec_[i];
-            double phi_N_new, phi_S_new, phi_W_new, phi_E_new;
+            double phi_N_new, phi_S_new;
 
             // select r =  dS if v >=0 else phi_NN - phi_N
             // if either r or dN is negative, return zero
@@ -740,44 +735,8 @@ namespace FVM_ANDS{
                 phi_S_new = phi_P - 0.5 * lim_S;
             }
 
-            double dE = phi_E - phi_P;
-            double dW = phi_P - phi_W;
-
-            if(u_local >= 0){
-                double lim_E = minmod_nodiv(dW, dE);
-                phi_E_new = phi_P + 0.5 * lim_E;
-                double dWW = phi_W - phi_WW;
-                double lim_W = minmod_nodiv(dWW, dW);
-                phi_W_new = phi_W + 0.5 * lim_W;
-            } else {
-                double dEE = phi_EE - phi_E;
-                double lim_E = minmod_nodiv(dEE, dE);
-                phi_E_new = phi_E - 0.5 * lim_E;
-                double lim_W = minmod_nodiv(dE, dW);
-                phi_W_new = phi_P - 0.5 * lim_W;
-            }
-
-            soln[i] = dt_x_[i] * invdx_ * (u_local * phi_W_new - u_local * phi_E_new)
-                    + dt_y_[i] * invdy_ * (v_local * phi_S_new - v_local * phi_N_new)
+            soln[i] = dt_y_[i] * invdy_ * (v_local * phi_S_new - v_local * phi_N_new)
                     + source_[i] * dt_ + phi_P;
-            
-            // if (soln[i] != 0) {std::cout << i << soln[i] << std::endl;}
-            // if (i == 18328) {
-            //     std::cout << "u " << u_local << std::endl;
-            //     std::cout << "v " << v_local << std::endl;
-            //     std::cout << "dt "<< dt_ << std::endl;
-            //     std::cout << "dx "<< dt_x_[i] << std::endl;
-            //     std::cout << "dy "<< dt_y_[i] << std::endl;
-            //     std::cout << "phi_W_new" << phi_W_new << std::endl;
-            //     std::cout << "phi_E_new" << phi_E_new << std::endl;
-            //     std::cout << "phi_S_new" << phi_S_new << std::endl;
-            //     std::cout << "phi_N_new" << phi_N_new << std::endl;
-            //     std::cout << soln[i] << std::endl;
-            // }
-            //     std::cout << "source " << source_[i] << std::endl;
-            //     std::cout << "phi_P" << phi_P << std::endl;
-            //     std::cout << "interior "<< i << " " << soln[i] << std::endl;
-            // }
         }
 
         // double avgBackgroundCalcTime = 0;
@@ -789,10 +748,9 @@ namespace FVM_ANDS{
         for(int i : boundaryIndices_){
             const PointCache& pc = pointCache_[i];
 
-            double u_local = u_vec_[i];
             double v_local = v_vec_[i];
 
-            double phi_N, phi_S, phi_W, phi_E;
+            double phi_N, phi_S;
 
             if(pc.isNorth){
                 phi_N = pc.bcVal;
@@ -812,6 +770,70 @@ namespace FVM_ANDS{
             else {
                 phi_S = phi_[i] +  0.5 * minmod_S_vNeg(i) * (phi_[pc.idx_S] - phi_[i]);
             }
+
+            //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
+            soln[i] = dt_y_[i] * invdy_ * (v_local * phi_S - v_local * phi_N)
+                    + source_[i] * dt_ + phi_[i];
+        }
+        return soln;
+    }
+Eigen::VectorXd AdvDiffSystem::xForwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
+        Eigen::VectorXd soln(nTotalPoints_);
+
+        // double avgBackgroundCalcTime = 0;
+        //Explicit Time-Stepping
+        #pragma omp parallel for    \
+        if      ( parallelAdvection ) \
+        default ( shared          ) \
+        schedule( static, 100      )
+        for(int i : interiorIndices_){
+            double phi_P  = phi_[i];
+            double phi_E  = phi_[i + ny_];
+            double phi_W  = phi_[i - ny_];
+            double phi_EE = phi_[i + 2*ny_];
+            double phi_WW = phi_[i - 2*ny_];
+
+            double u_local = u_vec_[i];
+            double phi_W_new, phi_E_new;
+
+            // select r =  dS if v >=0 else phi_NN - phi_N
+            // if either r or dN is negative, return zero
+            // else if r > dN, return dN
+            // else return r 
+
+            double dE = phi_E - phi_P;
+            double dW = phi_P - phi_W;
+
+            if(u_local >= 0){
+                double lim_E = minmod_nodiv(dW, dE);
+                phi_E_new = phi_P + 0.5 * lim_E;
+                double dWW = phi_W - phi_WW;
+                double lim_W = minmod_nodiv(dWW, dW);
+                phi_W_new = phi_W + 0.5 * lim_W;
+            } else {
+                double dEE = phi_EE - phi_E;
+                double lim_E = minmod_nodiv(dEE, dE);
+                phi_E_new = phi_E - 0.5 * lim_E;
+                double lim_W = minmod_nodiv(dE, dW);
+                phi_W_new = phi_P - 0.5 * lim_W;
+            }
+
+            soln[i] = dt_x_[i] * invdx_ * (u_local * phi_W_new - u_local * phi_E_new)
+                    + source_[i] * dt_ + phi_P;
+        }
+
+        // double avgBackgroundCalcTime = 0;
+        //Explicit Time-Stepping
+        #pragma omp parallel for    \
+        if      ( parallelAdvection ) \
+        default ( shared          ) \
+        schedule( static, 100      )
+        for(int i : boundaryIndices_){
+            const PointCache& pc = pointCache_[i];
+
+            double u_local = u_vec_[i];
+
+            double phi_W, phi_E;
 
             if(pc.isWest){
                 phi_W = pc.secondaryWest ? pc.secondaryBcVal : pc.bcVal;
@@ -834,13 +856,9 @@ namespace FVM_ANDS{
             }
 
             //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
-            soln[i] = /*(!operatorSplit) * (Dh_ * dt_ * invdx_ * (dphi_dx_E - dphi_dx_W) + Dv_ * dt_ * invdy_ * (dphi_dy_N - dphi_dy_S))\*/
-                     dt_x_[i] * invdx_ * (u_local * phi_W - u_local * phi_E) + dt_y_[i] * invdy_ * (v_local * phi_S - v_local * phi_N)\
+            soln[i] = dt_x_[i] * invdx_ * (u_local * phi_W - u_local * phi_E) 
                     + source_[i] * dt_ + phi_[i];
-
-            // if (soln[i] != 0) {std::cout << i << soln[i] << std::endl;}
         }
-        // std::cout << "Part two complete" << std::endl;
         return soln;
     }
     
