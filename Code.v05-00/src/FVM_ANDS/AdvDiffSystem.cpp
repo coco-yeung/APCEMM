@@ -556,8 +556,7 @@ namespace FVM_ANDS{
         boundaryIndices_.clear();
         pointCache_.clear();
         pointCache_.resize(nInteriorPoints_);
-        dt_x_.resize(nInteriorPoints_);
-        dt_y_.resize(nInteriorPoints_);
+        dt_adv_x_.resize(nInteriorPoints_);
         
         for(int i = 0; i < nInteriorPoints_; i++){
             //When a boundary condition is in place, phi at the face can be directly calculated using the BC.
@@ -610,116 +609,169 @@ namespace FVM_ANDS{
         }
     }
 
+    Eigen::VectorXd AdvDiffSystem::xSemiLagrangianAdvection(){
+        dt_adv_x_.clear();
+        
+        Eigen::VectorXd soln(nTotalPoints_);
+        
+        //loop through every point
+        //check where it came from/ if outside domain, set to bcVal
+        for(int i = 0; i < nInteriorPoints_; i++){
+            int ix = i / ny_;
+            int iy = i % ny_;
+            double u_local = u_vec_[i];
+            int x_steps;
+            
+            // find number of grids to move depending on velocity direciton
+            if (u_local >= 0){
+                x_steps = std::floor(dt_ * u_local * invdx_);
+            }
+            else {
+                x_steps = std::ceil(dt_ * u_local * invdx_);
+            }
+
+            int ix_dep = ix - nx_steps;
+
+            if (ix_dep < 0){
+                soln[i] = bcVals_right_[iy];
+            } 
+            else if(ix_dep + 1 > nx_){
+                soln[i] = bcVals_left_[iy];
+            } 
+            else{
+                soln[i] = phi_[i - x_steps * ny_];
+            }
+
+            dt_adv_x_[i] = u_local == 0 ? 0 : dt_ - nx_steps * dx_ / u_local;
+
+        }
+        return soln;
+    }
+
     Eigen::VectorXd AdvDiffSystem::ySemiLagrangianAdvection(){
         // dt_y_.setZero(); replace with double
         
         Eigen::VectorXd soln(nTotalPoints_);
+        double v_local = v_vec_[0]; // since v_vec_ is uniform over the matrix, we may just take the first value
+        int y_steps; // steps to take in y direction
+
+        // find largest possible integer number of steps
+        if (v_local >= 0){
+            y_steps = std::floor(dt_ * v_local * invdy_); 
+        }
+        else { // account for negative sign/direction
+            y_steps = std::ceil(dt_ * v_local * invdy_);
+        }
+
+        // if v_local is 0, FE advection timestep can also be 0 since we do dt_adv_y * invdy_ * (v_local * phi_S - v_local * phi_N)
+        dt_adv_y_ = v_local == 0 ? 0 : dt_ - ny_steps * dy_ / v_local;
         
         //loop through every point
         //check where it came from/ if outside domain, set to bcVal
         for(int i = 0; i < nInteriorPoints_; i++){
+            // find index in x and y directions
             int ix = i / ny_;
-            int iy = i % ny_;
-            double u_local = u_vec_[i];
-            double v_local = v_vec_[i];
-            int nx_steps;
-            int ny_steps;
-            
-            // find number of grids to move depending on velocity direciton
-            if (u_local >= 0){
-                nx_steps = std::floor(dt_ * u_local * invdx_);
-            }
-            else {
-                nx_steps = std::ceil(dt_ * u_local * invdx_);
-            }
-            if (v_local >= 0){
-                ny_steps = std::floor(dt_ * v_local * invdy_);
-            }
-            else {
-                ny_steps = std::ceil(dt_ * v_local * invdy_);
-            }
+            int iy = i % ny_; 
 
-            int ix_dep = ix - nx_steps;
+            // find departure point (backwards/where it was advected from)
             int iy_dep = iy - ny_steps;
 
+            // if outside of boundary, then take bcVals
             if (iy_dep < 0){
-                soln[i] = bcVals_top_[ix];
+                soln[i] = bcVals_bot_[ix];
             } 
             else if(iy_dep + 1 > ny_){
-                soln[i] = bcVals_bot_[ix];
+                soln[i] = bcVals_top_[ix];
             }
-            else if (ix_dep < 0){
-                soln[i] = bcVals_left_[iy];
-            } 
-            else if(ix_dep + 1 > nx_){
-                soln[i] = bcVals_right_[iy];
-            } 
             else{
-                soln[i] = phi_[ix_dep * ny_ + iy_dep];
+                soln[i] = phi_[i - ny_steps];
             }
-
-            dt_x_[i] = u_local == 0 ? 0 : dt_ - nx_steps * dx_ / u_local;
-            dt_y_[i] = v_local == 0 ? 0 : dt_ - ny_steps * dy_ / v_local;
-
         }
-
         return soln;
     }
 
-    Eigen::VectorXd AdvDiffSystem::xSemiLagrangianAdvection(){
-        dt_x_.setZero();
-        dt_y_.setZero();
-        
+    Eigen::VectorXd AdvDiffSystem::xForwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
         Eigen::VectorXd soln(nTotalPoints_);
-        
-        //loop through every point
-        //check where it came from/ if outside domain, set to bcVal
-        for(int i = 0; i < nInteriorPoints_; i++){
-            int ix = i / ny_;
-            int iy = i % ny_;
+
+        // double avgBackgroundCalcTime = 0;
+        //Explicit Time-Stepping
+        #pragma omp parallel for    \
+        if      ( parallelAdvection ) \
+        default ( shared          ) \
+        schedule( static, 100      )
+        for(int i : interiorIndices_){
+            double phi_P  = phi_[i];
+            double phi_E  = phi_[i + ny_];
+            double phi_W  = phi_[i - ny_];
+            double phi_EE = phi_[i + 2*ny_];
+            double phi_WW = phi_[i - 2*ny_];
+
             double u_local = u_vec_[i];
-            double v_local = v_vec_[i];
-            int nx_steps;
-            int ny_steps;
-            
-            // find number of grids to move depending on velocity direciton
-            if (u_local >= 0){
-                nx_steps = std::floor(dt_ * u_local * invdx_);
-            }
-            else {
-                nx_steps = std::ceil(dt_ * u_local * invdx_);
-            }
-            if (v_local >= 0){
-                ny_steps = std::floor(dt_ * v_local * invdy_);
-            }
-            else {
-                ny_steps = std::ceil(dt_ * v_local * invdy_);
+            double phi_W_new, phi_E_new;
+
+            // select r =  dS if v >=0 else phi_NN - phi_N
+            // if either r or dN is negative, return zero
+            // else if r > dN, return dN
+            // else return r 
+
+            double dE = phi_E - phi_P;
+            double dW = phi_P - phi_W;
+
+            if(u_local >= 0){
+                double lim_E = minmod_nodiv(dW, dE);
+                phi_E_new = phi_P + 0.5 * lim_E;
+                double dWW = phi_W - phi_WW;
+                double lim_W = minmod_nodiv(dWW, dW);
+                phi_W_new = phi_W + 0.5 * lim_W;
+            } else {
+                double dEE = phi_EE - phi_E;
+                double lim_E = minmod_nodiv(dEE, dE);
+                phi_E_new = phi_E - 0.5 * lim_E;
+                double lim_W = minmod_nodiv(dE, dW);
+                phi_W_new = phi_P - 0.5 * lim_W;
             }
 
-            int ix_dep = ix - nx_steps;
-            int iy_dep = iy - ny_steps;
-
-            if (iy_dep < 0){
-                soln[i] = bcVals_top_[ix];
-            } 
-            else if(iy_dep + 1 > ny_){
-                soln[i] = bcVals_bot_[ix];
-            }
-            else if (ix_dep < 0){
-                soln[i] = bcVals_left_[iy];
-            } 
-            else if(ix_dep + 1 > nx_){
-                soln[i] = bcVals_right_[iy];
-            } 
-            else{
-                soln[i] = phi_[ix_dep * ny_ + iy_dep];
-            }
-
-            dt_x_[i] = u_local == 0 ? 0 : dt_ - nx_steps * dx_ / u_local;
-            dt_y_[i] = v_local == 0 ? 0 : dt_ - ny_steps * dy_ / v_local;
-
+            soln[i] = dt_adv_x_[i] * invdx_ * (u_local * phi_W_new - u_local * phi_E_new)
+                    + 0.5 * source_[i] * dt_ + phi_P;
         }
 
+        // double avgBackgroundCalcTime = 0;
+        //Explicit Time-Stepping
+        #pragma omp parallel for    \
+        if      ( parallelAdvection ) \
+        default ( shared          ) \
+        schedule( static, 100      )
+        for(int i : boundaryIndices_){
+            const PointCache& pc = pointCache_[i];
+
+            double u_local = u_vec_[i];
+
+            double phi_W, phi_E;
+
+            if(pc.isWest){
+                phi_W = pc.secondaryWest ? pc.secondaryBcVal : pc.bcVal;
+            }
+            else if (u_local >= 0){
+                phi_W = phi_[pc.idx_W] + 0.5 * minmod_W_vPos(i) * (phi_[i] - phi_[pc.idx_W]);
+            }
+            else {
+                phi_W = phi_[i] + 0.5 * minmod_W_vNeg(i) * (phi_[pc.idx_W] - phi_[i]);
+            }
+
+            if(pc.isEast){
+                phi_E = pc.secondaryEast ? pc.secondaryBcVal : pc.bcVal;
+            }
+            else if (u_local >= 0){
+                phi_E = phi_[i] + 0.5 * minmod_E_vPos(i) * (phi_[pc.idx_E] - phi_[i]);
+            }
+            else {
+                phi_E = phi_[pc.idx_E] + 0.5 * minmod_E_vNeg(i) * (phi_[i] - phi_[pc.idx_E]);
+            }
+
+            //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
+            soln[i] = dt_adv_x_[i] * invdx_ * (u_local * phi_W - u_local * phi_E) 
+                    + 0.5 * source_[i] * dt_ + phi_[i];
+        }
         return soln;
     }
 
@@ -764,8 +816,8 @@ namespace FVM_ANDS{
                 phi_S_new = phi_P - 0.5 * lim_S;
             }
 
-            soln[i] = dt_y_[i] * invdy_ * (v_local * phi_S_new - v_local * phi_N_new)
-                    + source_[i] * dt_ + phi_P;
+            soln[i] = dt_adv_y * invdy_ * (v_local * phi_S_new - v_local * phi_N_new)
+                    + 0.5 * source_[i] * dt_ + phi_P; // half the source term since FE is split into two 1D operations
         }
 
         // double avgBackgroundCalcTime = 0;
@@ -801,92 +853,8 @@ namespace FVM_ANDS{
             }
 
             //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
-            soln[i] = dt_y_[i] * invdy_ * (v_local * phi_S - v_local * phi_N)
-                    + source_[i] * dt_ + phi_[i];
-        }
-        return soln;
-    }
-Eigen::VectorXd AdvDiffSystem::xForwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
-        Eigen::VectorXd soln(nTotalPoints_);
-
-        // double avgBackgroundCalcTime = 0;
-        //Explicit Time-Stepping
-        #pragma omp parallel for    \
-        if      ( parallelAdvection ) \
-        default ( shared          ) \
-        schedule( static, 100      )
-        for(int i : interiorIndices_){
-            double phi_P  = phi_[i];
-            double phi_E  = phi_[i + ny_];
-            double phi_W  = phi_[i - ny_];
-            double phi_EE = phi_[i + 2*ny_];
-            double phi_WW = phi_[i - 2*ny_];
-
-            double u_local = u_vec_[i];
-            double phi_W_new, phi_E_new;
-
-            // select r =  dS if v >=0 else phi_NN - phi_N
-            // if either r or dN is negative, return zero
-            // else if r > dN, return dN
-            // else return r 
-
-            double dE = phi_E - phi_P;
-            double dW = phi_P - phi_W;
-
-            if(u_local >= 0){
-                double lim_E = minmod_nodiv(dW, dE);
-                phi_E_new = phi_P + 0.5 * lim_E;
-                double dWW = phi_W - phi_WW;
-                double lim_W = minmod_nodiv(dWW, dW);
-                phi_W_new = phi_W + 0.5 * lim_W;
-            } else {
-                double dEE = phi_EE - phi_E;
-                double lim_E = minmod_nodiv(dEE, dE);
-                phi_E_new = phi_E - 0.5 * lim_E;
-                double lim_W = minmod_nodiv(dE, dW);
-                phi_W_new = phi_P - 0.5 * lim_W;
-            }
-
-            soln[i] = dt_x_[i] * invdx_ * (u_local * phi_W_new - u_local * phi_E_new)
-                    + source_[i] * dt_ + phi_P;
-        }
-
-        // double avgBackgroundCalcTime = 0;
-        //Explicit Time-Stepping
-        #pragma omp parallel for    \
-        if      ( parallelAdvection ) \
-        default ( shared          ) \
-        schedule( static, 100      )
-        for(int i : boundaryIndices_){
-            const PointCache& pc = pointCache_[i];
-
-            double u_local = u_vec_[i];
-
-            double phi_W, phi_E;
-
-            if(pc.isWest){
-                phi_W = pc.secondaryWest ? pc.secondaryBcVal : pc.bcVal;
-            }
-            else if (u_local >= 0){
-                phi_W = phi_[pc.idx_W] + 0.5 * minmod_W_vPos(i) * (phi_[i] - phi_[pc.idx_W]);
-            }
-            else {
-                phi_W = phi_[i] + 0.5 * minmod_W_vNeg(i) * (phi_[pc.idx_W] - phi_[i]);
-            }
-
-            if(pc.isEast){
-                phi_E = pc.secondaryEast ? pc.secondaryBcVal : pc.bcVal;
-            }
-            else if (u_local >= 0){
-                phi_E = phi_[i] + 0.5 * minmod_E_vPos(i) * (phi_[pc.idx_E] - phi_[i]);
-            }
-            else {
-                phi_E = phi_[pc.idx_E] + 0.5 * minmod_E_vNeg(i) * (phi_[i] - phi_[pc.idx_E]);
-            }
-
-            //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
-            soln[i] = dt_x_[i] * invdx_ * (u_local * phi_W - u_local * phi_E) 
-                    + source_[i] * dt_ + phi_[i];
+            soln[i] = dt_adv_y * invdy_ * (v_local * phi_S - v_local * phi_N)
+                    + 0.5 * source_[i] * dt_ + phi_[i];
         }
         return soln;
     }
