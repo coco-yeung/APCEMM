@@ -47,6 +47,7 @@ namespace FVM_ANDS{
             Eigen::VectorXd xForwardEulerAdvection(bool operatorSplit = false, bool parallelAdvection = false) const noexcept;
             Eigen::VectorXd ySemiLagrangianAdvection();
             Eigen::VectorXd yForwardEulerAdvection(bool operatorSplit = false, bool parallelAdvection = false) const noexcept;
+            Eigen::VectorXd forwardEulerAdvection(bool operatorSplit = false, bool parallelAdvection = false) const noexcept;
             // Breakup the implementation of sor_solve to allow for easy testing by inputing an arbitrary linear system to solve:
             // Implementation is moved outside of the class, and make class method to be used in code
             void sor_solve(double omega = 1.0, double threshold = 1e-3, int n_iters = 3){ 
