@@ -610,7 +610,63 @@ namespace FVM_ANDS{
         }
     }
 
-    Eigen::VectorXd AdvDiffSystem::semiLagrangianAdvection(){
+    Eigen::VectorXd AdvDiffSystem::ySemiLagrangianAdvection(){
+        // dt_y_.setZero(); replace with double
+        
+        Eigen::VectorXd soln(nTotalPoints_);
+        
+        //loop through every point
+        //check where it came from/ if outside domain, set to bcVal
+        for(int i = 0; i < nInteriorPoints_; i++){
+            int ix = i / ny_;
+            int iy = i % ny_;
+            double u_local = u_vec_[i];
+            double v_local = v_vec_[i];
+            int nx_steps;
+            int ny_steps;
+            
+            // find number of grids to move depending on velocity direciton
+            if (u_local >= 0){
+                nx_steps = std::floor(dt_ * u_local * invdx_);
+            }
+            else {
+                nx_steps = std::ceil(dt_ * u_local * invdx_);
+            }
+            if (v_local >= 0){
+                ny_steps = std::floor(dt_ * v_local * invdy_);
+            }
+            else {
+                ny_steps = std::ceil(dt_ * v_local * invdy_);
+            }
+
+            int ix_dep = ix - nx_steps;
+            int iy_dep = iy - ny_steps;
+
+            if (iy_dep < 0){
+                soln[i] = bcVals_top_[ix];
+            } 
+            else if(iy_dep + 1 > ny_){
+                soln[i] = bcVals_bot_[ix];
+            }
+            else if (ix_dep < 0){
+                soln[i] = bcVals_left_[iy];
+            } 
+            else if(ix_dep + 1 > nx_){
+                soln[i] = bcVals_right_[iy];
+            } 
+            else{
+                soln[i] = phi_[ix_dep * ny_ + iy_dep];
+            }
+
+            dt_x_[i] = u_local == 0 ? 0 : dt_ - nx_steps * dx_ / u_local;
+            dt_y_[i] = v_local == 0 ? 0 : dt_ - ny_steps * dy_ / v_local;
+
+        }
+
+        return soln;
+    }
+
+    Eigen::VectorXd AdvDiffSystem::xSemiLagrangianAdvection(){
         dt_x_.setZero();
         dt_y_.setZero();
         
@@ -662,34 +718,7 @@ namespace FVM_ANDS{
             dt_x_[i] = u_local == 0 ? 0 : dt_ - nx_steps * dx_ / u_local;
             dt_y_[i] = v_local == 0 ? 0 : dt_ - ny_steps * dy_ / v_local;
 
-            // if (i == 18328) {
-            //     std::cout << "u " << u_local << std::endl;
-            //     std::cout << "v " << v_local << std::endl;
-            //     std::cout << "dt "<< dt_ << std::endl;
-            //     std::cout << "dx "<< dx_ << std::endl;
-            //     std::cout << "dy "<< dy_ << std::endl;
-            //     std::cout << "nx "<< nx_ << std::endl;
-            //     std::cout << "ny "<< ny_ << std::endl;
-            //     std::cout << "source " << source_[i] << std::endl;
-            //     std::cout << "phi_P" << phi_[i] << std::endl;
-            //     std::cout << "nx_steps " << nx_steps << std::endl;
-            //     std::cout << "ix_dep " << ix_dep << std::endl;
-            //     std::cout << "iy_dep " << iy_dep << std::endl;
-            //     std::cout << "ix " << ix << std::endl;
-            //     std::cout << "iy" << iy << std::endl;
-            //     std::cout << "new i " << i - ix_dep * ny_ - iy_dep << std::endl;
-            //     std::cout << "interior "<< i << " " << soln[i] << std::endl;
-            //     std::cout << "N "<< i + 1 << " " << phi_[i + 1] << std::endl;
-            //     std::cout << "S "<< i - 1 << " " << phi_[i - 1] << std::endl;
-            //     std::cout << "E "<< i + ny_ << " " << phi_[i + ny_] << std::endl;
-            //     std::cout << "W "<< i - ny_ << " " << phi_[i - ny_] << std::endl;
-            // }
-
-            // if (phi_[i] != 0) {std::cout << i << " " << phi_[i] << std::endl;}
         }
-
-        // std::cout << "Part one complete" << std::endl;
-        // std::cout << soln[18148] << std::endl;
 
         return soln;
     }
