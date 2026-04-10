@@ -630,7 +630,7 @@ namespace FVM_ANDS{
                 x_steps = std::ceil(dt_ * u_local * invdx_);
             }
 
-            int ix_dep = ix - nx_steps;
+            int ix_dep = ix - x_steps;
 
             if (ix_dep < 0){
                 soln[i] = bcVals_right_[iy];
@@ -642,7 +642,7 @@ namespace FVM_ANDS{
                 soln[i] = phi_[i - x_steps * ny_];
             }
 
-            dt_adv_x_[i] = u_local == 0 ? 0 : dt_ - nx_steps * dx_ / u_local;
+            dt_adv_x_[i] = u_local == 0 ? 0 : dt_ - x_steps * dx_ / u_local;
 
         }
         return soln;
@@ -664,7 +664,7 @@ namespace FVM_ANDS{
         }
 
         // if v_local is 0, FE advection timestep can also be 0 since we do dt_adv_y * invdy_ * (v_local * phi_S - v_local * phi_N)
-        dt_adv_y_ = v_local == 0 ? 0 : dt_ - ny_steps * dy_ / v_local;
+        dt_adv_y_ = v_local == 0 ? 0 : dt_ - y_steps * dy_ / v_local;
         
         //loop through every point
         //check where it came from/ if outside domain, set to bcVal
@@ -674,7 +674,7 @@ namespace FVM_ANDS{
             int iy = i % ny_; 
 
             // find departure point (backwards/where it was advected from)
-            int iy_dep = iy - ny_steps;
+            int iy_dep = iy - y_steps;
 
             // if outside of boundary, then take bcVals
             if (iy_dep < 0){
@@ -684,7 +684,7 @@ namespace FVM_ANDS{
                 soln[i] = bcVals_top_[ix];
             }
             else{
-                soln[i] = phi_[i - ny_steps];
+                soln[i] = phi_[i - y_steps];
             }
         }
         return soln;
@@ -816,7 +816,7 @@ namespace FVM_ANDS{
                 phi_S_new = phi_P - 0.5 * lim_S;
             }
 
-            soln[i] = dt_adv_y * invdy_ * (v_local * phi_S_new - v_local * phi_N_new)
+            soln[i] = dt_adv_y_ * invdy_ * (v_local * phi_S_new - v_local * phi_N_new)
                     + 0.5 * source_[i] * dt_ + phi_P; // half the source term since FE is split into two 1D operations
         }
 
@@ -853,8 +853,126 @@ namespace FVM_ANDS{
             }
 
             //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
-            soln[i] = dt_adv_y * invdy_ * (v_local * phi_S - v_local * phi_N)
+            soln[i] = dt_adv_y_ * invdy_ * (v_local * phi_S - v_local * phi_N)
                     + 0.5 * source_[i] * dt_ + phi_[i];
+        }
+        return soln;
+    }
+    
+    Eigen::VectorXd AdvDiffSystem::forwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
+        Eigen::VectorXd soln(nTotalPoints_);
+        // double avgBackgroundCalcTime = 0;
+        //Explicit Time-Stepping
+        #pragma omp parallel for    \
+        if      ( parallelAdvection ) \
+        default ( shared          ) \
+        schedule( static, 100      )
+        for(int i = 0; i < nInteriorPoints_; i++){
+            //When a boundary condition is in place, phi at the face can be directly calculated using the BC.
+            //Therefore, that term goes to the RHS and the contribution of that face to the coeffs goes to 0.
+            bool isNorthBoundary = 0, isWestBoundary = 0, isEastBoundary = 0, isSouthBoundary = 0, secondaryWestBound = 0, secondaryEastBound = 0;
+            int idx_E = i + ny_;
+            int idx_W = i - ny_;
+            int idx_N = i + 1;
+            int idx_S = i - 1;
+
+            //commenting out this results in ~30% speedup
+            //The calls involving the optional are maybe 1/3 of the cost. Maybe something to look at later.
+            if(points_[i]->bcType() != BoundaryConditionFlag::INTERIOR){
+                Point* point = points_[i].get();
+                FaceDirection direction = point->bcDirection();
+                isNorthBoundary = direction == FaceDirection::NORTH;
+                isSouthBoundary = direction == FaceDirection::SOUTH;
+
+                //Corner cases...
+                bool secondaryWestBound = (point->secondBoundaryConds() && point->secondBoundaryConds()->direction == FaceDirection::WEST);
+                bool secondaryEastBound = (point->secondBoundaryConds() && point->secondBoundaryConds()->direction == FaceDirection::EAST);
+
+                isWestBoundary = (direction == FaceDirection::WEST || secondaryWestBound);
+                isEastBoundary = (direction == FaceDirection::EAST || secondaryEastBound);
+
+                //only call this lookup function on boundary nodes which are inconsequential in number
+                idx_N = isNorthBoundary? point->corrPoint() : idx_N;
+                idx_S = isSouthBoundary? point->corrPoint() : idx_S;
+                idx_E = isEastBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_E;
+                idx_W = isWestBoundary? (secondaryEastBound ? point->secondBoundaryConds()->corrPoint : point->corrPoint()) : idx_W;
+            }
+            //When you declare these vars (inside or outside loop) has 0 impact)
+            //takes ~ 6 out of 18 ns on background var calcs
+
+            //these cost almost nothing to compute but commenting out anyway for maximum performance
+            // double dphi_dx_E = (phi_[idx_E] - phi_[i]) * invdx_;
+            // double dphi_dx_W = (phi_[i] - phi_[idx_W]) * invdx_;
+            // double dphi_dy_N = (phi_[idx_N] - phi_[i]) * invdy_;
+            // double dphi_dy_S = (phi_[i] - phi_[idx_S]) * invdy_;
+            
+            //ignoreing distinction of faces saves a good amt of time
+            // double u_W = isWestBoundary? u_vec_[i] : 0.5 * (u_vec_[i] + u_vec_[idx_W]);
+            // double u_E = isEastBoundary? u_vec_[i] : 0.5 * (u_vec_[i] + u_vec_[idx_E]);
+            // double v_N = isNorthBoundary? v_vec_[i] : 0.5 * (v_vec_[i] + v_vec_[idx_N]);
+            // double v_S = isSouthBoundary? v_vec_[i] : 0.5 * (v_vec_[i] + v_vec_[idx_S]);
+            double u_local = u_vec_[i];
+            double v_local = v_vec_[i];
+
+            // auto stop = std::chrono::high_resolution_clock::now();
+            // auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
+            // avgBackgroundCalcTime += duration.count();
+            //std::cout << "ForwardEuler: Background Variable Calc Time: " << duration.count() << "ns" << std::endl;
+            // start = std::chrono::high_resolution_clock::now();
+            double phi_N, phi_S, phi_W, phi_E;
+
+            //Unraveling any of these if's into single liners hurts performance
+            //Killing the branching completely into 1 statement (not possible) only results in ~10% speedup (not worth it)
+            //Using only first order upwind can result in a ~40% speedup of the total advection calc.
+            //So... there is significantly more cost from actually doing the calculation than from branching.
+            if(isNorthBoundary){
+                phi_N = points_[i]->bcVal();
+            }
+            else if (v_local >= 0){
+                phi_N = phi_[i] + 0.5 * minmod_N_vPos(i) * (phi_[idx_N] - phi_[i]);
+            }
+            else {
+                phi_N = phi_[idx_N] + 0.5 * minmod_N_vNeg(i) * (phi_[i] - phi_[idx_N]);
+            }
+            if(isSouthBoundary){
+                phi_S = points_[i]->bcVal();
+            }
+            else if (v_local >= 0){
+                phi_S = phi_[idx_S] +  0.5 * minmod_S_vPos(i) * (phi_[i] - phi_[idx_S]);
+            }
+            else {
+                phi_S = phi_[i] +  0.5 * minmod_S_vNeg(i) * (phi_[idx_S] - phi_[i]);
+            }
+
+            if(isWestBoundary){
+                phi_W = secondaryWestBound ? points_[i]->secondBoundaryConds().value().bcVal : points_[i]->bcVal();
+            }
+            else if (u_local >= 0){
+                phi_W = phi_[idx_W] + 0.5 * minmod_W_vPos(i) * (phi_[i] - phi_[idx_W]);
+            }
+            else {
+                phi_W = phi_[i] + 0.5 * minmod_W_vNeg(i) * (phi_[idx_W] - phi_[i]);
+            }
+
+            if(isEastBoundary){
+                phi_E = secondaryEastBound ? points_[i]->secondBoundaryConds().value().bcVal : points_[i]->bcVal();
+            }
+            else if (u_local >= 0){
+                phi_E = phi_[i] + 0.5 * minmod_E_vPos(i) * (phi_[idx_E] - phi_[i]);
+            }
+            else {
+                phi_E = phi_[idx_E] + 0.5 * minmod_E_vNeg(i) * (phi_[i] - phi_[idx_E]);
+            }
+
+            //std::cout << "ForwardEuler: Fluxes and Update Time: " << duration.count() << "ns" << std::endl;
+
+            //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
+            soln[i] = /*(!operatorSplit) * (Dh_ * dt_ * invdx_ * (dphi_dx_E - dphi_dx_W) + Dv_ * dt_ * invdy_ * (dphi_dy_N - dphi_dy_S))\*/
+                     dt_ * invdx_ * (u_local * phi_W - u_local * phi_E) + dt_ * invdy_ * (v_local * phi_S - v_local * phi_N)\
+                    + source_[i] * dt_ + phi_[i];
+            // stop = std::chrono::high_resolution_clock::now();
+            // duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
+            // avgFluxCalcTime += duration.count();
         }
         return soln;
     }
