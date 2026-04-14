@@ -158,6 +158,8 @@ namespace FVM_ANDS{
         advDiffSys_.updatePhi(advDiffSys_.yForwardEulerAdvection(operatorSplit, parallelAdvection));
         advDiffSys_.applyBoundaryCondition();
 
+        advDiffSys_.updateTimestep(dt_max);
+
         #ifdef ENABLE_TIMING
         stop = std::chrono::high_resolution_clock::now();
         duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start);
