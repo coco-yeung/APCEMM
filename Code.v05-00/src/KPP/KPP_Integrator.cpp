@@ -127,6 +127,13 @@
  void KppSolve ( double A[], double b[] );
  
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+// needs to be set thread private for Rosenbrock, FunTemplate, and JacTemplate
+static double TIME;
+#pragma omp threadprivate(TIME)
+static int Nfun, Njac, Nstp, Nacc, Nrej, Ndec, Nsol, Nsng;
+#pragma omp threadprivate(Nfun, Njac, Nstp, Nacc, Nrej, Ndec, Nsol, Nsng)
+
 int INTEGRATE( double VAR[] , double FIX[], double TIN   , double TOUT,
                double ATOL[], double RTOL[], double STEPMIN )
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
