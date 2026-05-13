@@ -222,7 +222,10 @@ int main( int argc, char* argv[])
                 #endif /* OMP */
                 std::cout << "" << std::endl;
             }
-            Input_Opt.TS_AERO_FILENAME = "ts_aerosol_case" + std::to_string(iCase) + "_hhmm.nc";
+            
+            std::string ts_filename = "ts_aerosol_case" + std::to_string(iCase) + "_hhmm.nc";
+            #pragma omp critical
+            { Input_Opt.TS_AERO_FILENAME = ts_filename; }
 
             SimStatus case_status;
             switch (model) {
