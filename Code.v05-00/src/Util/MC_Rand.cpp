@@ -17,6 +17,8 @@
 #include "Util/MC_Rand.hpp"
 #include "Core/Input_Mod.hpp"
 
+thread_local std::mt19937 rng;
+
 void setSeed(const OptInput& input) {
 
     // Sets seed for pseudo-random generator.
