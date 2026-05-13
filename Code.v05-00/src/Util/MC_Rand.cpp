@@ -11,6 +11,8 @@
 /*                                                                  */
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 #include <iostream>
+#include <random>
+#include <omp.h>
 #include "APCEMM.h"
 #include "Util/MC_Rand.hpp"
 #include "Core/Input_Mod.hpp"
