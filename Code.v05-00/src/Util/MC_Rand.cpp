@@ -21,15 +21,15 @@ void setSeed(const OptInput& input) {
     #ifdef DEBUG
         // With DEBUG compile flag set a constant seed for reproducibility
         std::cout << "Compiled in DEBUG mode: random seed is set to 0 for all simulations" << std::endl;
-        srand(0);
+        rng.seed(0 + omp_get_thread_num());
     #else
         if(input.SIMULATION_FORCE_SEED){
-            srand(input.SIMULATION_SEED_VALUE);
-            std::cout << "Random seed is set to " << input.SIMULATION_SEED_VALUE << " for all simulations" << std::endl;
+            rng.seed(input.SIMULATION_SEED_VALUE + omp_get_thread_num());
+            std::cout << "Random seed is set to " << input.SIMULATION_SEED_VALUE << std::endl;
         }
         else{
-            // If the seed is not being forced to a value use the current unix timestamp instead. 
-            srand(time(NULL));
+            // If the seed is not being forced to a value use random device
+            rng.seed(std::random_device{}());
         }
 
     #endif
@@ -41,8 +41,9 @@ T fRand(const T fMin, const T fMax) {
 
     /* Returns a random number between fMin and fMax */
 
-    double f = (double) rand()/RAND_MAX;
-    return (T) fMin + f * (fMax - fMin);
+    thread_local std::mt19937 rng(std::random_device{}());
+    std::uniform_real_distribution<double> dist(fMin, fMax);
+    return (T) dist(rng);
 
 } /* End of fRand */
 
