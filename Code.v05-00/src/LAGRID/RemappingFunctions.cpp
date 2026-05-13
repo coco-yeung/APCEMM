@@ -211,6 +211,8 @@ namespace LAGRID {
 
         double newMass = 0;
         Vector_2D gridPDF(ny, Vector_1D(nx));
+        
+        #pragma omp parallel for reduction(+:newMass)
         for(int j = 0; j < ny; j++) {
             for (int i = 0; i < nx; i++) {
                 double yCenter = (yEdges[j+1] + yEdges[j]) / 2;
