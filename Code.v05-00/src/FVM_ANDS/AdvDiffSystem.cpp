@@ -609,13 +609,17 @@ namespace FVM_ANDS{
         }
     }
 
-    Eigen::VectorXd AdvDiffSystem::xSemiLagrangianAdvection(){
+    Eigen::VectorXd AdvDiffSystem::xSemiLagrangianAdvection(bool parallelAdvection) noexcept{
         dt_adv_x_.clear(); // each row would require its own "remaining" timestep
         
         Eigen::VectorXd soln(nTotalPoints_);
         
         //loop through every point
         //check where it came from/ if outside domain, set to bcVal
+        #pragma omp parallel for    \
+        if      ( parallelAdvection ) \
+        default ( shared          ) \
+        schedule( static, 100      )
         for(int i = 0; i < nInteriorPoints_; i++){
             //find indices in x and y direction
             int ix = i / ny_;
@@ -653,7 +657,7 @@ namespace FVM_ANDS{
         return soln;
     }
 
-    Eigen::VectorXd AdvDiffSystem::ySemiLagrangianAdvection(){
+    Eigen::VectorXd AdvDiffSystem::ySemiLagrangianAdvection(bool parallelAdvection) noexcept{
         // dt_y_.setZero(); replace with double
         
         Eigen::VectorXd soln(nTotalPoints_);
@@ -674,6 +678,10 @@ namespace FVM_ANDS{
         
         //loop through every point
         //check where it came from/ if outside domain, set to bcVal
+        #pragma omp parallel for    \
+        if      ( parallelAdvection ) \
+        default ( shared          ) \
+        schedule( static, 100      )
         for(int i = 0; i < nInteriorPoints_; i++){
             // find index in x and y directions
             int ix = i / ny_;

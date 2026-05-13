@@ -151,10 +151,10 @@ namespace FVM_ANDS{
 
         advDiffSys_.updateTimestep(dt_adv);
         // first solve in x direction
-        advDiffSys_.updatePhi(advDiffSys_.xSemiLagrangianAdvection());
+        advDiffSys_.updatePhi(advDiffSys_.xSemiLagrangianAdvection(parallelAdvection));
         advDiffSys_.updatePhi(advDiffSys_.xForwardEulerAdvection(operatorSplit, parallelAdvection));
         // then solve in y direction
-        advDiffSys_.updatePhi(advDiffSys_.ySemiLagrangianAdvection());
+        advDiffSys_.updatePhi(advDiffSys_.ySemiLagrangianAdvection(parallelAdvection));
         advDiffSys_.updatePhi(advDiffSys_.yForwardEulerAdvection(operatorSplit, parallelAdvection));
         advDiffSys_.applyBoundaryCondition();
 

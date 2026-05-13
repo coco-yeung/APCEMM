@@ -43,9 +43,9 @@ namespace FVM_ANDS{
             void applyBoundaryCondition();
             void updateBoundaryCondition(const BoundaryConditions& bc);
             void buildPointCache();
-            Eigen::VectorXd xSemiLagrangianAdvection();
+            Eigen::VectorXd xSemiLagrangianAdvection(bool parallelAdvection = false);
             Eigen::VectorXd xForwardEulerAdvection(bool operatorSplit = false, bool parallelAdvection = false) const noexcept;
-            Eigen::VectorXd ySemiLagrangianAdvection();
+            Eigen::VectorXd ySemiLagrangianAdvection(bool parallelAdvection = false);
             Eigen::VectorXd yForwardEulerAdvection(bool operatorSplit = false, bool parallelAdvection = false) const noexcept;
             Eigen::VectorXd forwardEulerAdvection(bool operatorSplit = false, bool parallelAdvection = false) const noexcept;
             // Breakup the implementation of sor_solve to allow for easy testing by inputing an arbitrary linear system to solve:
