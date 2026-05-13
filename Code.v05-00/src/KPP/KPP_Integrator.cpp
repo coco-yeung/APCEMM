@@ -53,8 +53,9 @@
  #define  DeltaMin (double)1.0e-6    
    
 /*~~~> Collect statistics: global variables */   
- int Nfun,Njac,Nstp,Nacc,Nrej,Ndec,Nsol,Nsng;
-
+// have to be static and threadprivate to avoid race conditions later in FunTemplate and JacTemplate
+static int Nfun, Njac, Nstp, Nacc, Nrej, Ndec, Nsol, Nsng;
+#pragma omp threadprivate(Nfun, Njac, Nstp, Nacc, Nrej, Ndec, Nsol, Nsng)
 
 /*~~~> Function headers */   
  void FunTemplate(double, double [], double [], double*); 
@@ -127,13 +128,6 @@
  void KppSolve ( double A[], double b[] );
  
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-
-// needs to be set thread private for Rosenbrock, FunTemplate, and JacTemplate
-static double TIME;
-#pragma omp threadprivate(TIME)
-static int Nfun, Njac, Nstp, Nacc, Nrej, Ndec, Nsol, Nsng;
-#pragma omp threadprivate(Nfun, Njac, Nstp, Nacc, Nrej, Ndec, Nsol, Nsng)
-
 int INTEGRATE( double VAR[] , double FIX[], double TIN   , double TOUT,
                double ATOL[], double RTOL[], double STEPMIN )
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
