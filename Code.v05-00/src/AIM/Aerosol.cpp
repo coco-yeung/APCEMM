@@ -1169,12 +1169,12 @@ void Aerosol::addAerosolToPDF( const Aerosol &rhs ) {
 
         #pragma omp parallel for default(shared) private(iNx, jNy, iBin) \
             schedule(dynamic, 1) if (!PARALLEL_CASES)
-        for (iBin = 0; iBin < nBin; iBin++)
+        for (jNy = 0; jNy < Ny; jNy++)
         {
-            double pow_value;
-            for (jNy = 0; jNy < Ny; jNy++)
+            for (iNx = 0; iNx < Nx; iNx++)
             {
-                for (iNx = 0; iNx < Nx; iNx++)
+                double pow_value;
+                for (iBin = 0; iBin < nBin; iBin++)
                 {
                     if constexpr (N == 0)
                         pow_value = 1;
