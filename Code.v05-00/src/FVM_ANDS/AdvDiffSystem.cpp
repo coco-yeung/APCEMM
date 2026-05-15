@@ -610,6 +610,14 @@ namespace FVM_ANDS{
     }
 
     Eigen::VectorXd AdvDiffSystem::xSemiLagrangianAdvection(){
+        /*
+        Advection is now split into four parts:
+        1. SL Advection in x direction for integer number of steps 
+        2. FE Advection in x direction for remaining time
+        3. SL Advection in y direction for integer number of steps
+        4. FE Advection in y direction for remaining time
+        */
+
         dt_adv_x_.clear(); // each row would require its own "remaining" timestep
         
         Eigen::VectorXd soln(nTotalPoints_);
@@ -617,11 +625,11 @@ namespace FVM_ANDS{
         //loop through every point
         //check where it came from/ if outside domain, set to bcVal
         for(int i = 0; i < nInteriorPoints_; i++){
-            //find indices in x and y direction
+            //find indices in x and y
             int ix = i / ny_;
             int iy = i % ny_;
             double u_local = u_vec_[i];
-            int x_steps;
+            int x_steps; // steps to take in x direction
             
             // find largest possible integer number of steps
             if (u_local >= 0){
@@ -654,7 +662,13 @@ namespace FVM_ANDS{
     }
 
     Eigen::VectorXd AdvDiffSystem::ySemiLagrangianAdvection(){
-        // dt_y_.setZero(); replace with double
+        /*
+        Advection is now split into four parts:
+        1. SL Advection in x direction for integer number of steps 
+        2. FE Advection in x direction for remaining time
+        3. SL Advection in y direction for integer number of steps
+        4. FE Advection in y direction for remaining time
+        */
         
         Eigen::VectorXd soln(nTotalPoints_);
         double v_local = v_vec_[0]; // since v_vec_ is uniform over the matrix, we may just take the first value
@@ -675,7 +689,7 @@ namespace FVM_ANDS{
         //loop through every point
         //check where it came from/ if outside domain, set to bcVal
         for(int i = 0; i < nInteriorPoints_; i++){
-            // find index in x and y directions
+            // find index in x and y
             int ix = i / ny_;
             int iy = i % ny_; 
 
@@ -696,9 +710,12 @@ namespace FVM_ANDS{
         return soln;
     }
 
-    // SPLIT forwardEulerAdvection into x and y direction (1D)
     Eigen::VectorXd AdvDiffSystem::xForwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
         Eigen::VectorXd soln(nTotalPoints_);
+        /*
+        NOTE: forward euler advection is split into 1D operations
+        NOTE: interior and boundary points are also treated separately, as interior points do not require as many conditions
+        */
 
         // double avgBackgroundCalcTime = 0;
         //Explicit Time-Stepping
@@ -715,11 +732,6 @@ namespace FVM_ANDS{
 
             double u_local = u_vec_[i];
             double phi_W_new, phi_E_new;
-
-            // select r =  dS if v >=0 else phi_NN - phi_N
-            // if either r or dN is negative, return zero
-            // else if r > dN, return dN
-            // else return r 
 
             double dE = phi_E - phi_P;
             double dW = phi_P - phi_W;
@@ -782,9 +794,12 @@ namespace FVM_ANDS{
         return soln;
     }
 
-    // SPLIT forwardEulerAdvection into x and y direction (1D)
     Eigen::VectorXd AdvDiffSystem::yForwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
         Eigen::VectorXd soln(nTotalPoints_);
+        /*
+        NOTE: forward euler advection is split into 1D operations
+        NOTE: interior and boundary points are also treated separately, as interior points do not require as many conditions
+        */
 
         // double avgBackgroundCalcTime = 0;
         //Explicit Time-Stepping
@@ -801,11 +816,6 @@ namespace FVM_ANDS{
 
             double v_local = v_vec_[i];
             double phi_N_new, phi_S_new;
-
-            // select r =  dS if v >=0 else phi_NN - phi_N
-            // if either r or dN is negative, return zero
-            // else if r > dN, return dN
-            // else return r 
 
             double dN = phi_N - phi_P;
             double dS = phi_P - phi_S;
@@ -891,11 +901,6 @@ namespace FVM_ANDS{
             double u_local = u_vec_[i];
             double v_local = v_vec_[i];
             double phi_N_new, phi_S_new, phi_W_new, phi_E_new;
-
-            // select r =  dS if v >=0 else phi_NN - phi_N
-            // if either r or dN is negative, return zero
-            // else if r > dN, return dN
-            // else return r 
 
             double dN = phi_N - phi_P;
             double dS = phi_P - phi_S;
