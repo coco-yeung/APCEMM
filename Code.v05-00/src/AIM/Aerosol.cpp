@@ -347,7 +347,18 @@ void Aerosol::addAerosolToPDF( const Aerosol &rhs ) {
             case 1: return Moment<1>();
             case 2: return Moment<2>();
             case 3: return Moment<3>();
-            default: return Moment<4>();
+            default:
+            {
+                // For arbitrary N, fall back to pow() directly
+                double moment = 0;
+                for (UInt iBin = 0; iBin < nBin; iBin++)
+                {
+                    moment += (log_Bin_Edges[iBin+1] - log_Bin_Edges[iBin])
+                            * pow(bin_Centers[iBin], n)
+                            * pdf[iBin];
+                }
+                return moment;
+            }
         }
     } 
     /* End of Aerosol::Moment */
@@ -1209,7 +1220,32 @@ void Aerosol::addAerosolToPDF( const Aerosol &rhs ) {
             case 1: return Moment<1>();
             case 2: return Moment<2>();
             case 3: return Moment<3>();
-            default: return Moment<4>();
+            default:
+            {
+                UInt jNy = 0;
+                UInt iNx = 0;
+                UInt iBin = 0;
+
+                Vector_2D moment(Ny, Vector_1D(Nx, 0.0E+00));
+                const double FACTOR = 3.0 / double(4.0 * PI);
+
+                #pragma omp parallel for default(shared) private(iNx, jNy, iBin) \
+                    schedule(dynamic, 1) if (!PARALLEL_CASES)
+                for (iBin = 0; iBin < nBin; iBin++)
+                {
+                    double pow_value;
+                    for (jNy = 0; jNy < Ny; jNy++)
+                    {
+                        for (iNx = 0; iNx < Nx; iNx++)
+                        {
+                            pow_value = pow(FACTOR * bin_VCenters[iBin][jNy][iNx], n / 3.0);
+                            moment[jNy][iNx] += (log_Bin_Edges[iBin+1] - log_Bin_Edges[iBin]) * pow_value * pdf[iBin][jNy][iNx];
+                        }
+                    }
+                }
+
+                return moment;
+            }
         }
     } /* End of Grid_Aerosol::Moment */
 
@@ -1721,7 +1757,22 @@ void Aerosol::addAerosolToPDF( const Aerosol &rhs ) {
             case 1: return Moment<1>(PDF);
             case 2: return Moment<2>(PDF);
             case 3: return Moment<3>(PDF);
-            default: return Moment<4>(PDF);
+            default:
+            {
+                UInt iBin = 0;
+                double moment = 0.0E+00;
+
+                #pragma omp parallel for default(shared) private(iBin) \
+                    reduction(+                                        \
+                            : moment)                                \
+                        schedule(dynamic, 1) if (!PARALLEL_CASES)
+                for (iBin = 0; iBin < nBin; iBin++)
+                {
+                    moment += (log_Bin_Edges[iBin+1] - log_Bin_Edges[iBin]) * pow(bin_Centers[iBin], n) * PDF[iBin];
+                }
+
+                return moment;
+            }
         }
     }/* End of Grid_Aerosol::Moment */
 
@@ -1766,7 +1817,22 @@ void Aerosol::addAerosolToPDF( const Aerosol &rhs ) {
             case 1: return Moment<1>(jNy, iNx);
             case 2: return Moment<2>(jNy, iNx);
             case 3: return Moment<3>(jNy, iNx);
-            default: return Moment<4>(jNy, iNx);
+            default:
+            {
+                UInt iBin = 0;
+                double moment = 0.0E+00;
+                const double FACTOR = 3.0 / double(4.0 * PI);
+
+                #pragma omp parallel for default(shared) private(iBin) \
+                    reduction(+                                        \
+                            : moment)                                \
+                        schedule(dynamic, 1) if (!PARALLEL_CASES)
+                for (iBin = 0; iBin < nBin; iBin++){
+                    moment += (log_Bin_Edges[iBin+1] - log_Bin_Edges[iBin]) * pow(FACTOR * bin_VCenters[iBin][jNy][iNx], n / 3.0) * pdf[iBin][jNy][iNx];
+                }
+
+                return moment;
+            }
         }
     }
      /* End of Grid_Aerosol::Moment */
