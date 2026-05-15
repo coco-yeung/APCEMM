@@ -186,8 +186,8 @@ namespace FVM_ANDS{
             std::vector<PointCache> pointCache_;
             std::vector<int> interiorIndices_;
             std::vector<int> boundaryIndices_;
-            std::vector<double> dt_adv_x_;
-            double dt_adv_y_;
+            std::vector<double> dt_adv_x_; //FE Advection timestep in x direction
+            double dt_adv_y_; //FE Advection timestep in y direction
 
             void initVelocVecs();
             void buildPointList();
