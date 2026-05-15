@@ -50,7 +50,7 @@ namespace FVM_ANDS{
             Eigen::VectorXd forwardEulerAdvection(bool operatorSplit = false, bool parallelAdvection = false) const noexcept;
             // Breakup the implementation of sor_solve to allow for easy testing by inputing an arbitrary linear system to solve:
             // Implementation is moved outside of the class, and make class method to be used in code
-            void sor_solve(double omega = 1.22, double threshold = 1e-3, int n_iters = 3){ 
+            void sor_solve(double omega = 1.15, double threshold = 1e-3, int n_iters = 3){ 
                 FVM_ANDS::sor_solve(getCoefMatrix(), rhs_, phi_, omega, threshold, n_iters); 
             };
             inline const Eigen::VectorXd& getRHS() const { return rhs_; }
