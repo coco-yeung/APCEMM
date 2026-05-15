@@ -64,10 +64,10 @@ class AIM::Aerosol
         //NOTE: now returning binMoment without the log bin ratio, as the only instance calling this function already calculates it
         inline double binMoment(int iBin, int n = 0) const {
             if (n == 0){
-                return pdf[iBin]; // if n = 0, it can skip the pow() calculation
+                return (log(bin_Edges[iBin + 1]) - log(bin_Edges[iBin])) * pdf[iBin]; // if n = 0, it can skip the pow() calculation
             }
 
-            return pow(bin_Centers[iBin], n) * pdf[iBin];
+            return (log(bin_Edges[iBin + 1]) - log(bin_Edges[iBin])) * pow(bin_Centers[iBin], n) * pdf[iBin];
         }
         //NOTE: This gives the moment in [- / cm3]. You need to multiply by factors to get it in [ / m] or something.
         template <UInt N> //Template allows us to evaulate the power at compile time to decrease runtime

@@ -344,8 +344,11 @@ namespace physFunc
 
         double l = lambda_p( r, m, T, P );
 
-        return ( (2.0 * r + l)*(2.0 * r + l)*(2.0 * r + l) - (4.0 * r * r + l * l) * sqrt(4.0 * r * r + l * l) ) / ( 6.0 * r * l ) - 2.0 * r;
+        double length_scale = 2.0 * r + l;
+        double length_scale_cubed = length_scale * length_scale * length_scale;
+        double pow_var = 4.0 * r * r + l * l;
 
+        return ( length_scale_cubed - pow_var * sqrt(pow_var) ) / ( 6.0 * r * l ) - 2.0 * r;
     } /* End of delta_p */
 
     double Reynolds_p( const double r, const double rho, \

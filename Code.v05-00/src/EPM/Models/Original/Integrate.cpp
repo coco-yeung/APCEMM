@@ -208,9 +208,9 @@ namespace EPM::Models
         double log10_timeInitial = log10(timeInitial);
         double timeFinal   = 2.0E+03;
         double log10_timeFinal = log10(timeFinal);
-        double denominator = 1/double( nTime - 1.0 );
+        double inv_denominator = 1/double( nTime - 1.0 );
         for ( iTime = 0; iTime < nTime; iTime++ ) {
-            timeArray[iTime] = pow( 10.0, log10_timeInitial + iTime * ( log10_timeFinal - log10_timeInitial ) * denominator );
+            timeArray[iTime] = pow( 10.0, log10_timeInitial + iTime * ( log10_timeFinal - log10_timeInitial ) * inv_denominator );
         }
 
         UInt iTime_3mins;

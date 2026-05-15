@@ -155,13 +155,13 @@ unsigned int STRAT_AER( const double temperature_K     , const double pressure_P
     /* Calculate conversion factors for SLA */
     /* Factor to convert volume (m^3/m^3 air) to
      * surface area density (cm^2/cm^3 air) */
-    const double SLA_VA = 8.406E-08 * 1028016298.1264735114;
+    const static double SLA_VA = 8.406E-08 * pow( 10.0, 12.0 * 0.751E+00 );
 
     /* Factor to convert effective radius to liquid radius (unitless) */
-    const double SLA_RR = 0.84113761484462320121169;
+    const static double SLA_RR = exp( -0.173E+00 );
 
     /* Factor to convert volume (m^3/m^3) to effective radius (m) */
-    const double SLA_VR = 0.357E-06 * 972.747223776965;
+    const static double SLA_VR = 0.357E-06 * pow( 10.0, 12.0 * 0.249E+00 );
 
     /* Reaction prefactors */
     double KHET_COMMON;
