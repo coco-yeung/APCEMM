@@ -49,7 +49,9 @@ namespace AIM
     /* Compute size of each bin */
     for (UInt iBin = 0; iBin < nBin; iBin++) {
         bin_Sizes[iBin] = bin_Edges[iBin + 1] - bin_Edges[iBin];
-        bin_VCenters[iBin] = 4.0 / 3.0 * PI * (bin_Edges_[iBin] * bin_Edges_[iBin] * bin_Edges_[iBin] + bin_Edges_[iBin + 1] * bin_Edges_[iBin + 1] * bin_Edges_[iBin + 1]) * 0.5;
+        double bin_edge_cubed = bin_Edges_[iBin] * bin_Edges_[iBin] * bin_Edges_[iBin];
+        double next_bin_edge_cubed = bin_Edges_[iBin + 1] * bin_Edges_[iBin + 1] * bin_Edges_[iBin + 1];
+        bin_VCenters[iBin] = 4.0 / 3.0 * PI * (bin_edge_cubed + next_bin_edge_cubed) * 0.5;
         log_Bin_Edges[iBin] = log(bin_Edges[iBin]);
     }
     log_Bin_Edges[nBin] = log(bin_Edges[nBin]);
@@ -123,7 +125,9 @@ namespace AIM
         pdf(pdf) {
             for (UInt iBin = 0; iBin < nBin; iBin++) {
                 bin_Sizes[iBin] = bin_Edges[iBin + 1] - bin_Edges[iBin];
-                bin_VCenters[iBin] = 4.0 / 3.0 * PI * (bin_Edges[iBin] * bin_Edges[iBin] * bin_Edges[iBin] + bin_Edges[iBin + 1] * bin_Edges[iBin + 1] * bin_Edges[iBin + 1]) * 0.5;
+                double bin_edge_cubed = bin_Edges_[iBin] * bin_Edges_[iBin] * bin_Edges_[iBin];
+                double next_bin_edge_cubed = bin_Edges_[iBin + 1] * bin_Edges_[iBin + 1] * bin_Edges_[iBin + 1];
+                bin_VCenters[iBin] = 4.0 / 3.0 * PI * (bin_edge_cubed + next_bin_edge_cubed) * 0.5;
                 log_Bin_Edges[iBin] = log(bin_Edges[iBin]);
             }
             log_Bin_Edges[nBin] = log(bin_Edges[nBin]);
