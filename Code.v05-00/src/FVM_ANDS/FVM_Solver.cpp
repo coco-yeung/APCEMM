@@ -73,13 +73,14 @@ namespace FVM_ANDS{
         double dt_max = advDiffSys_.timestep();
         double dt_adv = dt_max * (courant_max / courant);
 
-        int n_timesteps_advection_half =  std::ceil((0.5 * dt_max) / dt_adv);
-        dt_adv = (0.5 * dt_max); // / n_timesteps_advection_half;
+        // int n_timesteps_advection_half =  std::ceil((0.5 * dt_max) / dt_adv);
+        dt_adv = (0.5 * dt_max); // SL advection would not require timestep to comply with CFL 
 
-        #ifdef ENABLE_TIMING
-        std::cout << "              N Advection timesteps = 2 * " << n_timesteps_advection_half << std::endl;
-        auto start = std::chrono::high_resolution_clock::now();
-        #endif
+        // NOTE: No longer in use
+        // #ifdef ENABLE_TIMING
+        // std::cout << "              N Advection timesteps = 2 * " << n_timesteps_advection_half << std::endl;
+        // auto start = std::chrono::high_resolution_clock::now();
+        // #endif
 
         //Step 2: Solve Advection for half timestep
         advDiffSys_.updateTimestep(dt_adv);
