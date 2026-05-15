@@ -539,11 +539,9 @@ int KPP_Main_ADJ( const double finalPlume[], const double initBackg[],  \
                 METRIC = 0.0;
                 for ( i = 0; i < NOPT - 1; i++ ) {
                     if ( i < 1 )
-                        METRIC += ( DIAG[0] * ( VAR_RUN[ind_OPT[0]] + VAR_RUN[ind_OPT[1]] - finalPlume[ind_OPT[0]] - finalPlume[ind_OPT[1]] ) )
-                        * ( DIAG[0] * ( VAR_RUN[ind_OPT[0]] + VAR_RUN[ind_OPT[1]] - finalPlume[ind_OPT[0]] - finalPlume[ind_OPT[1]] ) );
+                        METRIC += pow( ( DIAG[0] * ( VAR_RUN[ind_OPT[0]] + VAR_RUN[ind_OPT[1]] - finalPlume[ind_OPT[0]] - finalPlume[ind_OPT[1]] ) ), 2);
                     else
-                        METRIC += ( DIAG[i+1] * ( VAR_RUN[ind_OPT[i+1]] - finalPlume[ind_OPT[i+1]] ) )
-                        * ( DIAG[i+1] * ( VAR_RUN[ind_OPT[i+1]] - finalPlume[ind_OPT[i+1]] ) );
+                        METRIC += pow( ( DIAG[i+1] * ( VAR_RUN[ind_OPT[i+1]] - finalPlume[ind_OPT[i+1]] ) ), 2);
                 }
 
                 if ( VERBOSE )
@@ -668,11 +666,9 @@ int KPP_Main_ADJ( const double finalPlume[], const double initBackg[],  \
             METRIC = 0.0;
             for ( i = 0; i < NOPT - 1; i++ ) {
                 if ( i < 1 ) //NOx
-                    METRIC += ( DIAG[0] * ( VAR_RUN[ind_OPT[0]] + VAR_RUN[ind_OPT[1]] - finalPlume[ind_OPT[0]] - finalPlume[ind_OPT[1]] ) )
-                    * ( DIAG[0] * ( VAR_RUN[ind_OPT[0]] + VAR_RUN[ind_OPT[1]] - finalPlume[ind_OPT[0]] - finalPlume[ind_OPT[1]] ) );
+                    METRIC += pow( ( DIAG[0] * ( VAR_RUN[ind_OPT[0]] + VAR_RUN[ind_OPT[1]] - finalPlume[ind_OPT[0]] - finalPlume[ind_OPT[1]] ) ), 2);
                 else
-                    METRIC += ( DIAG[i+1] * ( VAR_RUN[ind_OPT[i+1]] - finalPlume[ind_OPT[i+1]] ) )
-                    * ( DIAG[i+1] * ( VAR_RUN[ind_OPT[i+1]] - finalPlume[ind_OPT[i+1]] ) );
+                    METRIC += pow( ( DIAG[i+1] * ( VAR_RUN[ind_OPT[i+1]] - finalPlume[ind_OPT[i+1]] ) ), 2);
             }
 
             if ( VERBOSE ) {
@@ -863,11 +859,9 @@ int KPP_Main_ADJ( const double finalPlume[], const double initBackg[],  \
         METRIC_ABS_MIN = 0.0;
         for ( i = 0; i < NOPT - 1; i++ ) {
             if ( i < 1 )
-                METRIC_ABS_MIN += ( DIAG[0] * ( VAR_RUN[ind_OPT[0]] + VAR_RUN[ind_OPT[1]] - finalPlume[ind_OPT[0]] - finalPlume[ind_OPT[1]] ) )
-                * ( DIAG[0] * ( VAR_RUN[ind_OPT[0]] + VAR_RUN[ind_OPT[1]] - finalPlume[ind_OPT[0]] - finalPlume[ind_OPT[1]] ) );
+                METRIC_ABS_MIN += pow( ( DIAG[0] * ( VAR_RUN[ind_OPT[0]] + VAR_RUN[ind_OPT[1]] - finalPlume[ind_OPT[0]] - finalPlume[ind_OPT[1]] ) ), 2);
             else
-                METRIC_ABS_MIN += ( DIAG[i+1] * ( VAR_RUN[ind_OPT[i+1]] - finalPlume[ind_OPT[i+1]] ) )
-                * ( DIAG[i+1] * ( VAR_RUN[ind_OPT[i+1]] - finalPlume[ind_OPT[i+1]] ) );
+                METRIC_ABS_MIN += pow( ( DIAG[i+1] * ( VAR_RUN[ind_OPT[i+1]] - finalPlume[ind_OPT[i+1]] ) ), 2);
         }
 
         if ( VERBOSE )
@@ -927,11 +921,9 @@ int KPP_Main_ADJ( const double finalPlume[], const double initBackg[],  \
         METRIC = 0.0;
         for ( i = 0; i < NOPT - 1; i++ ) {
             if ( i < 1 )
-                METRIC += ( DIAG[0] * ( VAR_RUN[ind_OPT[0]] + VAR_RUN[ind_OPT[1]] - finalPlume[ind_OPT[0]] - finalPlume[ind_OPT[1]] ) )
-                * ( DIAG[0] * ( VAR_RUN[ind_OPT[0]] + VAR_RUN[ind_OPT[1]] - finalPlume[ind_OPT[0]] - finalPlume[ind_OPT[1]] ) );
+                METRIC += pow( ( DIAG[0] * ( VAR_RUN[ind_OPT[0]] + VAR_RUN[ind_OPT[1]] - finalPlume[ind_OPT[0]] - finalPlume[ind_OPT[1]] ) ), 2);
             else
-                METRIC += ( DIAG[i+1] * ( VAR_RUN[ind_OPT[i+1]] - finalPlume[ind_OPT[i+1]] ) )
-                * ( DIAG[i+1] * ( VAR_RUN[ind_OPT[i+1]] - finalPlume[ind_OPT[i+1]] ) );
+                METRIC += pow( ( DIAG[i+1] * ( VAR_RUN[ind_OPT[i+1]] - finalPlume[ind_OPT[i+1]] ) ), 2);
         }
 
         if ( VERBOSE )

@@ -1844,10 +1844,7 @@ double WLAMCH( char C )
 
     if (First) {
         First = 0;
-        double HALF2 = HALF * HALF;
-        double HALF4 = HALF2 * HALF2;
-        double HALF8 = HALF4 * HALF4;
-        Eps = HALF8 * HALF8;
+        Eps = pow(HALF,16);
         for ( i = 17; i <= 80; i++ ) {
             Eps = Eps*HALF;
 	        Suma = WLAMCH_ADD(ONE,Eps);
