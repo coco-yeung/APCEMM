@@ -549,9 +549,10 @@ namespace FVM_ANDS{
     }
 
     void AdvDiffSystem::buildPointCache() {
-        // previously contained in forwardEulerAdvection
-        // build once since position of boundary and interior indices do not change
-        // if size of nx_ and ny_ do not change
+        /*
+        The checking of whether a point is a boundary point was previously contained in forwardEulerAdvection
+        It only needs to be built once wince the position of boundary and interior indices do not change after advection
+        */
         interiorIndices_.clear();
         boundaryIndices_.clear();
         pointCache_.clear();
@@ -561,7 +562,7 @@ namespace FVM_ANDS{
         for(int i = 0; i < nInteriorPoints_; i++){
             //When a boundary condition is in place, phi at the face can be directly calculated using the BC.
             //Therefore, that term goes to the RHS and the contribution of that face to the coeffs goes to 0.
-            bool isNorthBoundary = 0, isWestBoundary = 0, isEastBoundary = 0, isSouthBoundary = 0, secondaryEastBound = 0, secondaryWestBound = 0;
+            bool isNorthBoundary = 0, isWestBoundary = 0, isEastBoundary = 0, isSouthBoundary = 0, secondaryWestBound = 0, secondaryEastBound = 0;
             int idx_E = i + ny_;
             int idx_W = i - ny_;
             int idx_N = i + 1;
@@ -880,6 +881,10 @@ namespace FVM_ANDS{
     // Kept for backwards compatibility but not currently in use in main workflow
     Eigen::VectorXd AdvDiffSystem::forwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
         Eigen::VectorXd soln(nTotalPoints_);
+        /*
+        Separate interior and boundary points since the computation for interior points is more straight-forward
+        Makes use of cache created earlier
+        */
 
         // double avgBackgroundCalcTime = 0;
         //Explicit Time-Stepping
@@ -904,7 +909,8 @@ namespace FVM_ANDS{
 
             double dN = phi_N - phi_P;
             double dS = phi_P - phi_S;
-
+            
+            // Removes checking of whether the point is a boundary
             if(v_local >= 0){
                 double lim_N = minmod_nodiv(dS, dN);
                 phi_N_new = phi_P + 0.5 * lim_N;
