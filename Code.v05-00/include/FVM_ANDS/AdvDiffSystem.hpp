@@ -27,6 +27,14 @@ namespace FVM_ANDS{
         double Dv;
         double dt;
     };
+    // Create struct to hold boundary points for advection calculation
+    struct PointCache {
+        bool isNorth, isSouth, isEast, isWest;
+        bool secondaryWest, secondaryEast;
+        int idx_N, idx_S, idx_E, idx_W;
+        double bcVal;
+        double secondaryBcVal;
+    };
     class AdvDiffSystem{
         public:
             AdvDiffSystem() = delete;
@@ -35,6 +43,11 @@ namespace FVM_ANDS{
             const Eigen::VectorXd& calcRHS();
             void applyBoundaryCondition();
             void updateBoundaryCondition(const BoundaryConditions& bc);
+            void buildPointCache();
+            Eigen::VectorXd xSemiLagrangianAdvection();
+            Eigen::VectorXd xForwardEulerAdvection(bool operatorSplit = false, bool parallelAdvection = false) const noexcept;
+            Eigen::VectorXd ySemiLagrangianAdvection();
+            Eigen::VectorXd yForwardEulerAdvection(bool operatorSplit = false, bool parallelAdvection = false) const noexcept;
             Eigen::VectorXd forwardEulerAdvection(bool operatorSplit = false, bool parallelAdvection = false) const noexcept;
             // Breakup the implementation of sor_solve to allow for easy testing by inputing an arbitrary linear system to solve:
             // Implementation is moved outside of the class, and make class method to be used in code
@@ -171,6 +184,12 @@ namespace FVM_ANDS{
             Eigen::VectorXd phi_;
             Eigen::VectorXd source_;
             Eigen::VectorXd deferredCorr_;
+            // vectors to cache boundary and interior points for advection calculation
+            std::vector<PointCache> pointCache_;
+            std::vector<int> interiorIndices_;
+            std::vector<int> boundaryIndices_;
+            std::vector<double> dt_adv_x_;  //FE Advection timestep in x direction
+            double dt_adv_y_;               //FE Advection timestep in y direction
 
             void initVelocVecs();
             void buildPointList();
@@ -329,6 +348,21 @@ namespace FVM_ANDS{
                 double phi_E = phi_[pointID + ny_];
                 double r = (phi_E - phi_P) / (phi_P - phi_W);
                 return std::max(0.0, std::min(r, 1.0));
+            }
+            inline double minmod_nodiv(double a, double b) const noexcept{
+                /*
+                Simplify minmod flux limiter to compute without division
+                a = numerator, b = denominator
+                Previously, the flux limiter was calculated as max(0, min(a/b, 1)) * b
+                This is equivalent to:
+                if a/b < 0 OR b == 0 return 0;
+                else if 0 <= a/b < 1 return a;
+                else if a/b > 1 return b;
+                */
+                if (b == 0) return 0;
+                if (std::signbit(a) != std::signbit(b) || a == 0) return 0;
+                if (std::abs(a) >= std::abs(b)) return b;
+                return a;
             }
             inline int neighbor_point(FaceDirection direction, int pointID) const noexcept{
                 Point* point = points_[pointID].get();

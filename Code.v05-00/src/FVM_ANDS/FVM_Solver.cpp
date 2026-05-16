@@ -73,20 +73,24 @@ namespace FVM_ANDS{
         double dt_max = advDiffSys_.timestep();
         double dt_adv = dt_max * (courant_max / courant);
 
-        int n_timesteps_advection_half =  std::ceil((0.5 * dt_max) / dt_adv);
-        dt_adv = (0.5 * dt_max) / n_timesteps_advection_half;
+        // int n_timesteps_advection_half =  std::ceil((0.5 * dt_max) / dt_adv);
+        dt_adv = (0.5 * dt_max); // SL advection would not require timestep to comply with CFL 
 
-        #ifdef ENABLE_TIMING
-        std::cout << "              N Advection timesteps = 2 * " << n_timesteps_advection_half << std::endl;
-        auto start = std::chrono::high_resolution_clock::now();
-        #endif
+        // NOTE: No longer in use
+        // #ifdef ENABLE_TIMING
+        // std::cout << "              N Advection timesteps = 2 * " << n_timesteps_advection_half << std::endl;
+        // auto start = std::chrono::high_resolution_clock::now();
+        // #endif
 
         //Step 2: Solve Advection for half timestep
         advDiffSys_.updateTimestep(dt_adv);
-        for(int i = 0; i < n_timesteps_advection_half; i++){
-            advDiffSys_.updatePhi(advDiffSys_.forwardEulerAdvection(operatorSplit, parallelAdvection));
-            advDiffSys_.applyBoundaryCondition();
-        }
+        // first solve in x direction
+        advDiffSys_.updatePhi(advDiffSys_.xSemiLagrangianAdvection());
+        advDiffSys_.updatePhi(advDiffSys_.xForwardEulerAdvection(operatorSplit, parallelAdvection));
+        // then solve in y direction
+        advDiffSys_.updatePhi(advDiffSys_.ySemiLagrangianAdvection());
+        advDiffSys_.updatePhi(advDiffSys_.yForwardEulerAdvection(operatorSplit, parallelAdvection));
+        advDiffSys_.applyBoundaryCondition();
 
         #ifdef ENABLE_TIMING
         auto stop = std::chrono::high_resolution_clock::now();
@@ -147,10 +151,13 @@ namespace FVM_ANDS{
         //Step 4: Explicitly solve advection to full timestep
 
         advDiffSys_.updateTimestep(dt_adv);
-        for(int i = 0; i < n_timesteps_advection_half; i++){
-            advDiffSys_.updatePhi(advDiffSys_.forwardEulerAdvection(operatorSplit));
-            advDiffSys_.applyBoundaryCondition();
-        }
+        // first solve in x direction
+        advDiffSys_.updatePhi(advDiffSys_.xSemiLagrangianAdvection());
+        advDiffSys_.updatePhi(advDiffSys_.xForwardEulerAdvection(operatorSplit, parallelAdvection));
+        // then solve in y direction
+        advDiffSys_.updatePhi(advDiffSys_.ySemiLagrangianAdvection());
+        advDiffSys_.updatePhi(advDiffSys_.yForwardEulerAdvection(operatorSplit, parallelAdvection));
+        advDiffSys_.applyBoundaryCondition();
 
         advDiffSys_.updateTimestep(dt_max);
 
@@ -181,6 +188,7 @@ namespace FVM_ANDS{
     }
 
     void FVM_Solver::advectionHalfTimestepSolve(Vector_2D& vec, const BoundaryConditions& bc, double courant_max){
+        //: don't think this is even used anymore 
         Eigen::VectorXd vec_Eigen = std2dVec_to_eigenVec(vec);
         advDiffSys_.updatePhi(vec_Eigen);
         advDiffSys_.updateBoundaryCondition(bc);
