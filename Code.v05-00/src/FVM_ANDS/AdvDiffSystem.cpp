@@ -556,6 +556,7 @@ namespace FVM_ANDS{
         boundaryIndices_.clear();
         pointCache_.clear();
         pointCache_.resize(nInteriorPoints_);
+        dt_adv_x_.resize(nInteriorPoints_);
         
         for(int i = 0; i < nInteriorPoints_; i++){
             //When a boundary condition is in place, phi at the face can be directly calculated using the BC.
@@ -608,6 +609,275 @@ namespace FVM_ANDS{
         }
     }
 
+    Eigen::VectorXd AdvDiffSystem::xSemiLagrangianAdvection(){
+        /*
+        Advection is now split into four parts:
+        1. SL Advection in x direction for integer number of steps 
+        2. FE Advection in x direction for remaining time
+        3. SL Advection in y direction for integer number of steps
+        4. FE Advection in y direction for remaining time
+        */
+
+        dt_adv_x_.clear(); // each row would require its own "remaining" timestep
+        
+        Eigen::VectorXd soln(nTotalPoints_);
+        
+        //loop through every point
+        //check where it came from/ if outside domain, set to bcVal
+        for(int i = 0; i < nInteriorPoints_; i++){
+            //find indices in x and y
+            int ix = i / ny_;
+            int iy = i % ny_;
+            double u_local = u_vec_[i];
+            int x_steps; // steps to take in x direction
+            
+            // find largest possible integer number of steps
+            if (u_local >= 0){
+                x_steps = std::floor(dt_ * u_local * invdx_);
+            }
+            else {
+                x_steps = std::ceil(dt_ * u_local * invdx_);
+            }
+
+            // find departure point (backwards/where it was advected from)
+            int ix_dep = ix - x_steps;
+
+            // if outside of boundary, then take bcVals
+            if (ix_dep < 0){
+                soln[i] = bcVals_right_[iy];
+            } 
+            else if(ix_dep + 1 > nx_){
+                soln[i] = bcVals_left_[iy];
+            } 
+            else{
+                soln[i] = phi_[i - x_steps * ny_];
+            }
+
+            // find remaining timestep for FE
+            // if u_local is 0, FE advection timestep can also be 0 since we do dt_adv_x[i] * invdx_ * (u_local * phi_W - u_local * phi_E) later
+            dt_adv_x_[i] = u_local == 0 ? 0 : dt_ - x_steps * dx_ / u_local;
+
+        }
+        return soln;
+    }
+
+    Eigen::VectorXd AdvDiffSystem::ySemiLagrangianAdvection(){
+        /*
+        Advection is now split into four parts:
+        1. SL Advection in x direction for integer number of steps 
+        2. FE Advection in x direction for remaining time
+        3. SL Advection in y direction for integer number of steps
+        4. FE Advection in y direction for remaining time
+        */
+        
+        Eigen::VectorXd soln(nTotalPoints_);
+        double v_local = v_vec_[0]; // since v_vec_ is uniform over the matrix, we may just take the first value
+        int y_steps; // steps to take in y direction
+
+        // find largest possible integer number of steps
+        if (v_local >= 0){
+            y_steps = std::floor(dt_ * v_local * invdy_); 
+        }
+        else { // account for negative sign/direction
+            y_steps = std::ceil(dt_ * v_local * invdy_);
+        }
+
+        // find remaining timestep for FE
+        // if v_local is 0, FE advection timestep can also be 0 since we do dt_adv_y * invdy_ * (v_local * phi_S - v_local * phi_N) later
+        dt_adv_y_ = v_local == 0 ? 0 : dt_ - y_steps * dy_ / v_local;
+        
+        //loop through every point
+        //check where it came from/ if outside domain, set to bcVal
+        for(int i = 0; i < nInteriorPoints_; i++){
+            // find index in x and y
+            int ix = i / ny_;
+            int iy = i % ny_; 
+
+            // find departure point (backwards/where it was advected from)
+            int iy_dep = iy - y_steps;
+
+            // if outside of boundary, then take bcVals
+            if (iy_dep < 0){
+                soln[i] = bcVals_bot_[ix];
+            } 
+            else if(iy_dep + 1 > ny_){
+                soln[i] = bcVals_top_[ix];
+            }
+            else{
+                soln[i] = phi_[i - y_steps];
+            }
+        }
+        return soln;
+    }
+
+    Eigen::VectorXd AdvDiffSystem::xForwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
+        Eigen::VectorXd soln(nTotalPoints_);
+        /*
+        NOTE: forward euler advection is split into 1D operations
+        NOTE: interior and boundary points are also treated separately, as interior points do not require as many conditions
+        */
+
+        // double avgBackgroundCalcTime = 0;
+        //Explicit Time-Stepping
+        #pragma omp parallel for    \
+        if      ( parallelAdvection ) \
+        default ( shared          ) \
+        schedule( static, 100      )
+        for(int i : interiorIndices_){
+            double phi_P  = phi_[i];
+            double phi_E  = phi_[i + ny_];
+            double phi_W  = phi_[i - ny_];
+            double phi_EE = phi_[i + 2*ny_];
+            double phi_WW = phi_[i - 2*ny_];
+
+            double u_local = u_vec_[i];
+            double phi_W_new, phi_E_new;
+
+            double dE = phi_E - phi_P;
+            double dW = phi_P - phi_W;
+
+            if(u_local >= 0){
+                double lim_E = minmod_nodiv(dW, dE);
+                phi_E_new = phi_P + 0.5 * lim_E;
+                double dWW = phi_W - phi_WW;
+                double lim_W = minmod_nodiv(dWW, dW);
+                phi_W_new = phi_W + 0.5 * lim_W;
+            } else {
+                double dEE = phi_EE - phi_E;
+                double lim_E = minmod_nodiv(dEE, dE);
+                phi_E_new = phi_E - 0.5 * lim_E;
+                double lim_W = minmod_nodiv(dE, dW);
+                phi_W_new = phi_P - 0.5 * lim_W;
+            }
+
+            soln[i] = dt_adv_x_[i] * invdx_ * (u_local * phi_W_new - u_local * phi_E_new)
+                    + 0.5 * source_[i] * dt_ + phi_P;
+        }
+
+        // double avgBackgroundCalcTime = 0;
+        //Explicit Time-Stepping
+        #pragma omp parallel for    \
+        if      ( parallelAdvection ) \
+        default ( shared          ) \
+        schedule( static, 100      )
+        for(int i : boundaryIndices_){
+            const PointCache& pc = pointCache_[i];
+
+            double u_local = u_vec_[i];
+
+            double phi_W, phi_E;
+
+            if(pc.isWest){
+                phi_W = pc.secondaryWest ? pc.secondaryBcVal : pc.bcVal;
+            }
+            else if (u_local >= 0){
+                phi_W = phi_[pc.idx_W] + 0.5 * minmod_W_vPos(i) * (phi_[i] - phi_[pc.idx_W]);
+            }
+            else {
+                phi_W = phi_[i] + 0.5 * minmod_W_vNeg(i) * (phi_[pc.idx_W] - phi_[i]);
+            }
+
+            if(pc.isEast){
+                phi_E = pc.secondaryEast ? pc.secondaryBcVal : pc.bcVal;
+            }
+            else if (u_local >= 0){
+                phi_E = phi_[i] + 0.5 * minmod_E_vPos(i) * (phi_[pc.idx_E] - phi_[i]);
+            }
+            else {
+                phi_E = phi_[pc.idx_E] + 0.5 * minmod_E_vNeg(i) * (phi_[i] - phi_[pc.idx_E]);
+            }
+
+            //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
+            soln[i] = dt_adv_x_[i] * invdx_ * (u_local * phi_W - u_local * phi_E) 
+                    + 0.5 * source_[i] * dt_ + phi_[i];
+        }
+        return soln;
+    }
+
+    Eigen::VectorXd AdvDiffSystem::yForwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
+        Eigen::VectorXd soln(nTotalPoints_);
+        /*
+        NOTE: forward euler advection is split into 1D operations
+        NOTE: interior and boundary points are also treated separately, as interior points do not require as many conditions
+        */
+
+        // double avgBackgroundCalcTime = 0;
+        //Explicit Time-Stepping
+        #pragma omp parallel for    \
+        if      ( parallelAdvection ) \
+        default ( shared          ) \
+        schedule( static, 100      )
+        for(int i : interiorIndices_){
+            double phi_P  = phi_[i];
+            double phi_N  = phi_[i + 1];
+            double phi_S  = phi_[i - 1];
+            double phi_NN = phi_[i + 2];
+            double phi_SS = phi_[i - 2];
+
+            double v_local = v_vec_[i];
+            double phi_N_new, phi_S_new;
+
+            double dN = phi_N - phi_P;
+            double dS = phi_P - phi_S;
+
+            if(v_local >= 0){
+                double lim_N = minmod_nodiv(dS, dN);
+                phi_N_new = phi_P + 0.5 * lim_N;
+                double dSS = phi_S - phi_SS;
+                double lim_S = minmod_nodiv(dSS, dS);
+                phi_S_new = phi_S + 0.5 * lim_S;
+            } else {
+                double dNN = phi_NN - phi_N;
+                double lim_N = minmod_nodiv(dNN, dN);
+                phi_N_new = phi_N - 0.5 * lim_N;
+                double lim_S = neighbor_point(FaceDirection::NORTH, i) ? 0 : minmod_nodiv(dN, dS);
+                phi_S_new = phi_P - 0.5 * lim_S;
+            }
+
+            soln[i] = dt_adv_y_ * invdy_ * (v_local * phi_S_new - v_local * phi_N_new)
+                    + 0.5 * source_[i] * dt_ + phi_P; // half the source term since FE is split into two 1D operations
+        }
+
+        // double avgBackgroundCalcTime = 0;
+        //Explicit Time-Stepping
+        #pragma omp parallel for    \
+        if      ( parallelAdvection ) \
+        default ( shared          ) \
+        schedule( static, 100      )
+        for(int i : boundaryIndices_){
+            const PointCache& pc = pointCache_[i];
+
+            double v_local = v_vec_[i];
+
+            double phi_N, phi_S;
+
+            if(pc.isNorth){
+                phi_N = pc.bcVal;
+            }
+            else if (v_local >= 0){
+                phi_N = phi_[i] + 0.5 * minmod_N_vPos(i) * (phi_[pc.idx_N] - phi_[i]);
+            }
+            else {
+                phi_N = phi_[pc.idx_N] + 0.5 * minmod_N_vNeg(i) * (phi_[i] - phi_[pc.idx_N]);
+            }
+            if(pc.isSouth){
+                phi_S = pc.bcVal;
+            }
+            else if (v_local >= 0){
+                phi_S = phi_[pc.idx_S] +  0.5 * minmod_S_vPos(i) * (phi_[i] - phi_[pc.idx_S]);
+            }
+            else {
+                phi_S = phi_[i] +  0.5 * minmod_S_vNeg(i) * (phi_[pc.idx_S] - phi_[i]);
+            }
+
+            //Even just setting this to 0 is like a 2 ns save out of 12, not sure if worth
+            soln[i] = dt_adv_y_ * invdy_ * (v_local * phi_S - v_local * phi_N)
+                    + 0.5 * source_[i] * dt_ + phi_[i];
+        }
+        return soln;
+    }
+    
+    // Kept for backwards compatibility but not currently in use in main workflow
     Eigen::VectorXd AdvDiffSystem::forwardEulerAdvection(bool operatorSplit, bool parallelAdvection) const noexcept{
         Eigen::VectorXd soln(nTotalPoints_);
 
@@ -631,11 +901,6 @@ namespace FVM_ANDS{
             double u_local = u_vec_[i];
             double v_local = v_vec_[i];
             double phi_N_new, phi_S_new, phi_W_new, phi_E_new;
-
-            // select r =  dS if v >=0 else phi_NN - phi_N
-            // if either r or dN is negative, return zero
-            // else if r > dN, return dN
-            // else return r 
 
             double dN = phi_N - phi_P;
             double dS = phi_P - phi_S;
