@@ -11,7 +11,6 @@ option(DEBUG "Enable debug mode" OFF)
 SET(RINGS 0)
 SET(OMP 1)
 option(BUILD_TEST ON)
-option(ENABLE_PROFILING "Enable perf-friendly build (-g -O2)" OFF)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")	
     include(CheckCXXCompilerFlag)

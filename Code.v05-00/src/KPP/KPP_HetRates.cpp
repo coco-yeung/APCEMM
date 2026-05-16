@@ -754,7 +754,7 @@ double HETHBr( const double A, const double B, const double KHETI_SLA[11], const
             ADJUSTEDRATE = AREA[N] * XSTKCF;
         } else {
             /* Reaction rate for surface of aerosol */
-             ADJUSTEDRATE = ARSL1K( AREA[N], RADI[N], AIRDENS, XSTKCF, pow( TEMP, 0.5 ), pow( A, 0.5 ) );
+            ADJUSTEDRATE = ARSL1K( AREA[N], RADI[N], AIRDENS, XSTKCF, pow( TEMP, 0.5 ), pow( A, 0.5 ) );
         }
 
         if ( ( DO_EDUCT ) && ( N < 2 ) ) {
